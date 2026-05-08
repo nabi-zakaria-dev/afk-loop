@@ -67,6 +67,9 @@ const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
 export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   const now = opts?.now ?? new Date();
+  if (opts?.focus !== undefined) {
+    return renderFocus(status, opts.focus, now);
+  }
   const header = renderHeader(status, now);
 
   const sections: string[] = [header];
@@ -97,6 +100,27 @@ export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   }
 
   return sections.join("\n");
+}
+
+function renderFocus(status: StatusJson, focus: number, now: Date): string {
+  const item = status.inFlight.find((i) => i.issue === focus);
+  if (!item) {
+    return `afk-loop · focus #${focus}\nissue #${focus} is not in flight`;
+  }
+  const phase = PHASE_LABEL[item.phase];
+  const elapsed = formatElapsed(now.getTime() - new Date(item.lastTransitionAt).getTime());
+  const lines = [`afk-loop · focus #${item.issue} · ${item.title}`, `[${phase}] · ${elapsed}`];
+  if (!item.acs || item.acs.length === 0) {
+    lines.push("(no acceptance criteria parsed)");
+    return lines.join("\n");
+  }
+  for (const ac of item.acs) {
+    const layer = ac.layer ? ` [${ac.layer}]` : "";
+    const stamp = ac.greenAt ?? ac.redAt ?? "";
+    const stampSuffix = stamp ? ` · ${stamp}` : "";
+    lines.push(`  AC ${ac.n}${layer} ${ac.title} · ${ac.state}${stampSuffix}`);
+  }
+  return lines.join("\n");
 }
 
 function renderHeader(status: StatusJson, now: Date): string {
