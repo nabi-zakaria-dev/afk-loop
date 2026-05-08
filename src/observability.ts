@@ -13,7 +13,7 @@ export interface InFlightItem {
 export interface StatusJson {
   currentIteration: number;
   frontier: number[];
-  inFlight: number[];
+  inFlight: InFlightItem[];
   lastEventAt: string;
   runState: "running" | "paused" | "done" | "failed";
 }

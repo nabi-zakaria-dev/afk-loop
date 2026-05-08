@@ -49,7 +49,7 @@ describe("writeStatus", () => {
       const status: StatusJson = {
         currentIteration: 2,
         frontier: [42, 43],
-        inFlight: [42],
+        inFlight: [],
         lastEventAt: "2030-01-01T00:00:00Z",
         runState: "running",
       };
