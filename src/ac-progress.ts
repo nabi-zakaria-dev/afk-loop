@@ -9,6 +9,15 @@ export interface AcProgress {
   greenAt?: string;
 }
 
+export interface CommitInfo {
+  subject: string;
+  authoredAt: string;
+}
+
+export function computeAcStates(_acs: AcProgress[], _commits: CommitInfo[]): AcProgress[] {
+  throw new Error("not implemented");
+}
+
 export function parseAcceptanceCriteria(body: string): AcProgress[] {
   const lines = body.split("\n");
   const start = lines.findIndex((l) => /^##\s+Acceptance\s+criteria\b/i.test(l));
