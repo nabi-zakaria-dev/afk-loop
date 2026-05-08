@@ -63,7 +63,7 @@ Usage:
   afk-loop migrate-labels --from <X> --to <Y> [--dry-run]
                                       Bulk-relabel open issues from <X> to <Y>.
   afk-loop init [--force]             Bootstrap .afk-loop/ in the current target repo.
-  afk-loop watch                      Live progress dashboard (alt-screen, refreshes every 3s, 'q' to quit).
+  afk-loop watch [--focus <issue>]    Live progress dashboard (alt-screen, refreshes every 3s, 'q' to quit). Use --focus to zoom into one issue's full AC list.
   afk-loop help                       Show this message.
 
 Run inside a target repo that has .afk-loop/config.json present.
@@ -281,18 +281,24 @@ async function main(): Promise<void> {
       await runInitCmd(rest);
       return;
     case "watch":
-      await runWatchCmd();
+      await runWatchCmd(rest);
       return;
   }
 }
 
-async function runWatchCmd(): Promise<void> {
+async function runWatchCmd(rest: string[]): Promise<void> {
   const cwd = process.cwd();
   const statusPath = join(cwd, ".afk-loop", "status.json");
-  const code = await runWatch({
+  const focusRaw = parseFlag(rest, "--focus");
+  const focus = focusRaw !== undefined ? Number.parseInt(focusRaw, 10) : undefined;
+  if (focus !== undefined && (!Number.isFinite(focus) || focus <= 0)) {
+    console.error("Usage: afk-loop watch [--focus <issue-number>]");
+    process.exit(1);
+  }
+  const watchOpts: Parameters<typeof runWatch>[0] = {
     cwd,
     log: (s) => console.log(s),
-    loop: () =>
+    loop: (f) =>
       watchLoop({
         readStatus: () => {
           if (!existsSync(statusPath)) return null;
@@ -317,8 +323,11 @@ async function runWatchCmd(): Promise<void> {
             globalThis.clearInterval(id);
           };
         },
+        ...(f !== undefined ? { renderOpts: { focus: f } } : {}),
       }),
-  });
+  };
+  if (focus !== undefined) watchOpts.focus = focus;
+  const code = await runWatch(watchOpts);
   process.exit(code);
 }
 
