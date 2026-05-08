@@ -66,12 +66,19 @@ export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   const now = opts?.now ?? new Date();
   const header = `afk-loop · iter ${status.currentIteration} · ${status.runState}`;
 
+  const sections: string[] = [header];
   if (status.inFlight.length === 0) {
-    return [header, "no issues in flight"].join("\n");
+    sections.push("no issues in flight");
+  } else {
+    sections.push(...status.inFlight.map((item) => formatInFlight(item, now)));
   }
 
-  const lines = status.inFlight.map((item) => formatInFlight(item, now));
-  return [header, ...lines].join("\n");
+  if (status.queued && status.queued.length > 0) {
+    sections.push(`QUEUE (${status.queued.length})`);
+    for (const q of status.queued) sections.push(`  #${q.issue} ${q.title}`);
+  }
+
+  return sections.join("\n");
 }
 
 function formatInFlight(item: InFlightItem, now: Date): string {
