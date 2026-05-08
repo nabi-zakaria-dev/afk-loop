@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -94,6 +94,12 @@ export async function runClaudePhase(opts: RunOptions): Promise<RunResult> {
   });
 
   log.end();
+
+  // Persist stderr to a sidecar so failures are debuggable from `summary.md`
+  // alone — matches the morning-workflow expectation in DESIGN.md.
+  if (stderr.length > 0) {
+    writeFileSync(`${opts.logPath}.stderr`, stderr);
+  }
 
   let outcome: Outcome;
   let rateLimitedUntil: string | undefined;
