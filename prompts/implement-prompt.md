@@ -148,12 +148,14 @@ Optional scope: `feat(reviewer):`, `test(depgraph):`.
 
 End the subject line (or include in the body) with the issue reference: `(#{{ISSUE_NUMBER}})`.
 
+**Include the AC tag `[AC N]` in the commit subject** for every RED, GREEN, and REFACTOR commit, where `N` is the 1-based index of the acceptance criterion (in the order they appear in the issue body). The `afk-loop watch` dashboard reads these tags to show live AC progress; without them, AC mapping falls back to positional pairing of `test:` and `feat:`/`fix:` commits, which is correct only when the discipline is followed strictly. Tags make the mapping explicit and unambiguous.
+
 Example sequence for a single AC:
 
 ```
-test: add cycle detection for self-loops (#42)
-feat: detect self-loops in dep-graph DFS (#42)
-refactor: extract dedupeCycles helper (#42)
+test: add cycle detection for self-loops [AC 2] (#42)
+feat: detect self-loops in dep-graph DFS [AC 2] (#42)
+refactor: extract dedupeCycles helper [AC 2] (#42)
 ```
 
 ## What the reviewer checks
