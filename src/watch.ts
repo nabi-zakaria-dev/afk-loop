@@ -12,8 +12,25 @@ export interface WatchLoopDeps {
   setInterval: (fn: () => void, ms: number) => () => void;
 }
 
-export function watchLoop(_deps: WatchLoopDeps): Promise<void> {
-  throw new Error("not implemented");
+export const TICK_MS = 3000;
+
+export function watchLoop(deps: WatchLoopDeps): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const renderOnce = (): void => {
+      const status = deps.readStatus();
+      if (status === null) return;
+      deps.write(renderFrame(status));
+    };
+    renderOnce();
+    const clearTick = deps.setInterval(renderOnce, TICK_MS);
+    const unsubKey = deps.onKey((key) => {
+      if (key === "q") {
+        clearTick();
+        unsubKey();
+        resolve();
+      }
+    });
+  });
 }
 
 const PHASE_LABEL: Record<InFlightItem["phase"], string> = {
