@@ -64,7 +64,7 @@ const PHASE_LABEL: Record<InFlightItem["phase"], string> = {
 
 export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   const now = opts?.now ?? new Date();
-  const header = `afk-loop · iter ${status.currentIteration} · ${status.runState}`;
+  const header = renderHeader(status);
 
   const sections: string[] = [header];
   if (status.inFlight.length === 0) {
@@ -94,6 +94,15 @@ export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   }
 
   return sections.join("\n");
+}
+
+function renderHeader(status: StatusJson): string {
+  const base = `afk-loop · iter ${status.currentIteration} · ${status.runState}`;
+  if (status.runState === "paused") {
+    const until = status.rateLimitedUntil ? ` until ${status.rateLimitedUntil}` : "";
+    return `${base}\n⚠ RATE-LIMITED${until}`;
+  }
+  return base;
 }
 
 function formatInFlight(item: InFlightItem, now: Date): string {
