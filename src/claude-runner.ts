@@ -30,17 +30,23 @@ export interface RunResult {
 const RATE_LIMIT_RE = /rate.?limit|usage limit|too many requests/i;
 const ISO_RE = /\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\b/;
 
-export async function runClaudePhase(opts: RunOptions): Promise<RunResult> {
-  mkdirSync(dirname(opts.logPath), { recursive: true });
-  const log = createWriteStream(opts.logPath, { flags: "a" });
+export interface BuildArgsInput {
+  maxTurns: number;
+  prompt: string;
+  userMessage: string;
+  permissionMode?: string;
+  extraArgs?: string[];
+}
 
-  const bin = opts.claudeBin ?? "claude";
-  const args = [
+export function buildClaudeArgs(opts: BuildArgsInput): string[] {
+  return [
     "-p",
     "--max-turns",
     String(opts.maxTurns),
     "--output-format",
     "stream-json",
+    // Required by Claude Code: -p + stream-json combination errors without --verbose.
+    "--verbose",
     "--permission-mode",
     opts.permissionMode ?? "bypassPermissions",
     "--append-system-prompt",
@@ -48,6 +54,21 @@ export async function runClaudePhase(opts: RunOptions): Promise<RunResult> {
     ...(opts.extraArgs ?? []),
     opts.userMessage,
   ];
+}
+
+export async function runClaudePhase(opts: RunOptions): Promise<RunResult> {
+  mkdirSync(dirname(opts.logPath), { recursive: true });
+  const log = createWriteStream(opts.logPath, { flags: "a" });
+
+  const bin = opts.claudeBin ?? "claude";
+  const buildInput: BuildArgsInput = {
+    maxTurns: opts.maxTurns,
+    prompt: opts.prompt,
+    userMessage: opts.userMessage,
+  };
+  if (opts.permissionMode !== undefined) buildInput.permissionMode = opts.permissionMode;
+  if (opts.extraArgs !== undefined) buildInput.extraArgs = opts.extraArgs;
+  const args = buildClaudeArgs(buildInput);
 
   const child = spawn(bin, args, {
     cwd: opts.cwd,
