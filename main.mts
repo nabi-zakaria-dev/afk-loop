@@ -8,6 +8,10 @@ import { mergeBranches } from "./src/merger.ts";
 import { runOrchestrator } from "./src/orchestrator.ts";
 import { migrateLabels } from "./src/migrate.ts";
 import { initTarget } from "./src/init.ts";
+import { runWatch, watchLoop } from "./src/watch.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { StatusJson } from "./src/observability.ts";
 
 type Subcommand =
   | "plan"
@@ -19,6 +23,7 @@ type Subcommand =
   | "run"
   | "migrate-labels"
   | "init"
+  | "watch"
   | "help";
 const KNOWN: Subcommand[] = [
   "plan",
@@ -30,6 +35,7 @@ const KNOWN: Subcommand[] = [
   "run",
   "migrate-labels",
   "init",
+  "watch",
   "help",
 ];
 
@@ -57,6 +63,7 @@ Usage:
   afk-loop migrate-labels --from <X> --to <Y> [--dry-run]
                                       Bulk-relabel open issues from <X> to <Y>.
   afk-loop init [--force]             Bootstrap .afk-loop/ in the current target repo.
+  afk-loop watch                      Live progress dashboard (alt-screen, refreshes every 3s, 'q' to quit).
   afk-loop help                       Show this message.
 
 Run inside a target repo that has .afk-loop/config.json present.
@@ -273,7 +280,46 @@ async function main(): Promise<void> {
     case "init":
       await runInitCmd(rest);
       return;
+    case "watch":
+      await runWatchCmd();
+      return;
   }
+}
+
+async function runWatchCmd(): Promise<void> {
+  const cwd = process.cwd();
+  const statusPath = join(cwd, ".afk-loop", "status.json");
+  const code = await runWatch({
+    cwd,
+    log: (s) => console.log(s),
+    loop: () =>
+      watchLoop({
+        readStatus: () => {
+          if (!existsSync(statusPath)) return null;
+          return JSON.parse(readFileSync(statusPath, "utf8")) as StatusJson;
+        },
+        write: (s) => process.stdout.write(s),
+        onKey: (handler) => {
+          const stdin = process.stdin;
+          if (stdin.isTTY) stdin.setRawMode(true);
+          stdin.resume();
+          const listener = (buf: Buffer): void => handler(buf.toString());
+          stdin.on("data", listener);
+          return (): void => {
+            stdin.removeListener("data", listener);
+            if (stdin.isTTY) stdin.setRawMode(false);
+            stdin.pause();
+          };
+        },
+        setInterval: (fn, ms) => {
+          const id = globalThis.setInterval(fn, ms);
+          return (): void => {
+            globalThis.clearInterval(id);
+          };
+        },
+      }),
+  });
+  process.exit(code);
 }
 
 main().catch((err) => {
