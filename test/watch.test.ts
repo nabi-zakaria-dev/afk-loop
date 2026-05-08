@@ -360,6 +360,25 @@ describe("runWatch", () => {
     }
   });
 
+  it("forwards the focus option to the loop callback", async () => {
+    const dir = mkDir();
+    try {
+      writeStatus(dir, baseStatus(1));
+      let receivedFocus: number | undefined;
+      await runWatch({
+        cwd: dir,
+        log: () => {},
+        focus: 42,
+        loop: async (f) => {
+          receivedFocus = f;
+        },
+      });
+      expect(receivedFocus).toBe(42);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("prints 'no run in progress' and returns 0 when status.json is missing", async () => {
     const dir = mkDir();
     try {

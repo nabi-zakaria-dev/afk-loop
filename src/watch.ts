@@ -13,12 +13,14 @@ export interface WatchLoopDeps {
   write: (s: string) => void;
   onKey: (handler: (key: string) => void) => () => void;
   setInterval: (fn: () => void, ms: number) => () => void;
+  renderOpts?: RenderOpts;
 }
 
 export interface RunWatchDeps {
   cwd: string;
   log: (s: string) => void;
-  loop: () => Promise<void>;
+  loop: (focus?: number) => Promise<void>;
+  focus?: number;
 }
 
 export async function runWatch(deps: RunWatchDeps): Promise<number> {
@@ -27,7 +29,7 @@ export async function runWatch(deps: RunWatchDeps): Promise<number> {
     deps.log("no run in progress");
     return 0;
   }
-  await deps.loop();
+  await deps.loop(deps.focus);
   return 0;
 }
 
@@ -42,7 +44,7 @@ export function watchLoop(deps: WatchLoopDeps): Promise<void> {
     const renderOnce = (): void => {
       const status = deps.readStatus();
       if (status === null) return;
-      deps.write(CLEAR_AND_HOME + renderFrame(status));
+      deps.write(CLEAR_AND_HOME + renderFrame(status, deps.renderOpts));
     };
     renderOnce();
     const clearTick = deps.setInterval(renderOnce, TICK_MS);
