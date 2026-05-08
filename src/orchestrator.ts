@@ -19,6 +19,7 @@ import {
   notify as defaultNotify,
   commitUrl,
   type NotifyEvent,
+  type InFlightItem,
 } from "./observability.ts";
 import { execFileSync } from "node:child_process";
 
@@ -157,18 +158,22 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
     progress("worktreeReady", `iter ${iteration}: worktree ready for #${issue.number}`);
   }
 
+  const inFlightByIssue = new Map<number, InFlightItem>();
   if (!opts.disableObservability) {
     const startedAt = new Date().toISOString();
+    for (const issue of frontier) {
+      inFlightByIssue.set(issue.number, {
+        issue: issue.number,
+        title: issue.title,
+        phase: "implementer",
+        startedAt,
+        lastTransitionAt: startedAt,
+      });
+    }
     writeStatus(opts.cwd, {
       currentIteration: iteration,
       frontier: frontier.map((i) => i.number),
-      inFlight: frontier.map((issue) => ({
-        issue: issue.number,
-        title: issue.title,
-        phase: "implementer" as const,
-        startedAt,
-        lastTransitionAt: startedAt,
-      })),
+      inFlight: [...inFlightByIssue.values()],
       lastEventAt: startedAt,
       runState: "running",
     });
@@ -222,6 +227,29 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
   }
 
   if (toReview.length > 0) {
+    if (!opts.disableObservability) {
+      const transitionAt = new Date().toISOString();
+      const updated: InFlightItem[] = [];
+      for (const issue of toReview) {
+        const prev = inFlightByIssue.get(issue.number);
+        const next: InFlightItem = {
+          issue: issue.number,
+          title: issue.title,
+          phase: "reviewer",
+          startedAt: prev?.startedAt ?? transitionAt,
+          lastTransitionAt: transitionAt,
+        };
+        inFlightByIssue.set(issue.number, next);
+        updated.push(next);
+      }
+      writeStatus(opts.cwd, {
+        currentIteration: iteration,
+        frontier: frontier.map((i) => i.number),
+        inFlight: updated,
+        lastEventAt: transitionAt,
+        runState: "running",
+      });
+    }
     progress("reviewerStarted", `iter ${iteration}: reviewing ${toReview.length} branch(es) with commits`);
     const revResults = await Promise.allSettled(
       toReview.map(async (issue) => {
