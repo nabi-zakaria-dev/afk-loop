@@ -59,6 +59,26 @@ describe("renderFrame", () => {
     expect(frame).toContain("1m 12s");
   });
 
+  it("renders a QUEUE section listing queued items by # and title", () => {
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [],
+      queued: [
+        { issue: 50, title: "Send invoice reminder" },
+        { issue: 51, title: "Bulk-archive" },
+      ],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status);
+    expect(frame).toContain("QUEUE");
+    expect(frame).toContain("#50");
+    expect(frame).toContain("Send invoice reminder");
+    expect(frame).toContain("#51");
+    expect(frame).toContain("Bulk-archive");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,
