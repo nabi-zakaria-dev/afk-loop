@@ -32,6 +32,36 @@ const fakeGh = () => {
   return { calls, runner: (args: string[]) => { calls.push(args); } };
 };
 
+describe("orchestrator streaming progress", () => {
+  it("calls the progress callback at key milestones during the run", async () => {
+    const repo = mkTmpRepo();
+    try {
+      const events: Array<{ event: string; message: string }> = [];
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(42)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+        progress: (event, message) => { events.push({ event, message }); },
+      });
+      const eventNames = events.map((e) => e.event);
+      // Minimum-viable progress: user must see iteration boundaries and per-issue
+      // implementer outcomes streaming as they happen, not just at the end.
+      expect(eventNames).toContain("iterationStarted");
+      expect(eventNames).toContain("implementerComplete");
+      expect(eventNames).toContain("iterationCompleted");
+      expect(eventNames).toContain("runFinished");
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
 describe("orchestrator (single iteration, serial)", () => {
   it("runs full pipeline for one unblocked issue (success path)", async () => {
     const repo = mkTmpRepo();
