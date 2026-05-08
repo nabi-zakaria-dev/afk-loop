@@ -93,6 +93,33 @@ describe("watchLoop", () => {
     keyHandler!("q");
     await promise;
   });
+
+  it("only resolves on 'q' keypress, ignoring other keys", async () => {
+    let keyHandler: ((k: string) => void) | null = null;
+    let resolved = false;
+
+    const promise = watchLoop({
+      readStatus: () => baseStatus(1),
+      write: () => {},
+      onKey: (h) => {
+        keyHandler = h;
+        return () => {};
+      },
+      setInterval: () => () => {},
+    }).then(() => {
+      resolved = true;
+    });
+
+    keyHandler!("x");
+    keyHandler!("a");
+    keyHandler!("\r");
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    keyHandler!("q");
+    await promise;
+    expect(resolved).toBe(true);
+  });
 });
 
 describe("writeStatus inFlight shape", () => {
