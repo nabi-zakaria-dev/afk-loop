@@ -20,8 +20,14 @@ export interface RunWatchDeps {
   loop: () => Promise<void>;
 }
 
-export async function runWatch(_deps: RunWatchDeps): Promise<number> {
-  throw new Error("not implemented");
+export async function runWatch(deps: RunWatchDeps): Promise<number> {
+  const path = join(deps.cwd, ".afk-loop", "status.json");
+  if (!existsSync(path)) {
+    deps.log("no run in progress");
+    return 0;
+  }
+  await deps.loop();
+  return 0;
 }
 
 export const TICK_MS = 3000;
