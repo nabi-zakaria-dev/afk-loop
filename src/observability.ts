@@ -2,12 +2,15 @@ import { existsSync, mkdirSync, appendFileSync, writeFileSync, readFileSync } fr
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
+import type { AcProgress } from "./ac-progress.ts";
+
 export interface InFlightItem {
   issue: number;
   title: string;
   phase: "implementer" | "reviewer" | "merger";
   startedAt: string;
   lastTransitionAt: string;
+  acs?: AcProgress[];
 }
 
 export interface QueuedItem {

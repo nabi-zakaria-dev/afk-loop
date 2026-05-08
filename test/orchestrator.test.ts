@@ -313,4 +313,46 @@ describe("orchestrator status.json inFlight", () => {
       repo.cleanup();
     }
   });
+
+  it("populates inFlight[].acs from the issue body at implementer-start", async () => {
+    const repo = mkTmpRepo();
+    try {
+      let captured: InFlightItem[] | null = null;
+      const gh = fakeGh();
+      const issue: Issue = {
+        number: 42,
+        title: "Test issue",
+        body: "## Acceptance criteria\n- [ ] `[API]` First criterion\n- [ ] `[UI]` Second criterion\n",
+        blockedBy: [],
+        isHITL: false,
+      };
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [issue],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+        progress: (event) => {
+          if (event === "implementerStarted" && captured === null) {
+            const path = join(repo.dir, ".afk-loop", "status.json");
+            if (existsSync(path)) {
+              captured = (JSON.parse(readFileSync(path, "utf8")) as StatusJson).inFlight;
+            }
+          }
+        },
+      });
+      expect(captured).not.toBeNull();
+      const items = captured as unknown as InFlightItem[];
+      const acs = items[0]!.acs;
+      expect(acs).toBeDefined();
+      expect(acs).toHaveLength(2);
+      expect(acs![0]).toMatchObject({ n: 1, title: "First criterion", layer: "API", state: "pending" });
+      expect(acs![1]).toMatchObject({ n: 2, title: "Second criterion", layer: "UI", state: "pending" });
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
