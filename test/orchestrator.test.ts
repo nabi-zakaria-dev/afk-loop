@@ -195,4 +195,38 @@ describe("orchestrator status.json inFlight", () => {
       repo.cleanup();
     }
   });
+
+  it("updates inFlight phase to reviewer and refreshes lastTransitionAt at reviewer-start", async () => {
+    const repo = mkTmpRepo();
+    try {
+      let capturedAtReviewerStart: InFlightItem[] | null = null;
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(42)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+        progress: (event) => {
+          if (event === "reviewerStarted" && capturedAtReviewerStart === null) {
+            const path = join(repo.dir, ".afk-loop", "status.json");
+            if (existsSync(path)) {
+              const status = JSON.parse(readFileSync(path, "utf8")) as StatusJson;
+              capturedAtReviewerStart = status.inFlight;
+            }
+          }
+        },
+      });
+      expect(capturedAtReviewerStart).not.toBeNull();
+      const items = capturedAtReviewerStart as unknown as InFlightItem[];
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ issue: 42, phase: "reviewer" });
+      expect(items[0]!.lastTransitionAt >= items[0]!.startedAt).toBe(true);
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
