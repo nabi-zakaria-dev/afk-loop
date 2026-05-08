@@ -119,6 +119,31 @@ describe("runClaudePhase", () => {
     }
   });
 
+  it("persists stderr to a sidecar file alongside the JSONL log on failure", async () => {
+    const repo = mkTmpRepo();
+    try {
+      const baseSha = headSha(repo.dir);
+      const logPath = join(repo.dir, "log.jsonl");
+      const result = await runClaudePhase({
+        cwd: repo.dir,
+        prompt: "do the thing",
+        userMessage: "issue 42",
+        maxTurns: 50,
+        logPath,
+        claudeBin: MOCK_CLAUDE,
+        env: { MOCK_CLAUDE_SCENARIO: "error" },
+        commitRange: { from: baseSha, to: "HEAD" },
+      });
+      expect(result.outcome).toBe("error");
+      const stderrPath = `${logPath}.stderr`;
+      expect(existsSync(stderrPath)).toBe(true);
+      const stderrContent = readFileSync(stderrPath, "utf8");
+      expect(stderrContent).toContain("something broke");
+    } finally {
+      repo.cleanup();
+    }
+  });
+
   it("captures error outcome on non-rate-limit failure", async () => {
     const repo = mkTmpRepo();
     try {
