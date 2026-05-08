@@ -312,6 +312,54 @@ describe("watchLoop", () => {
     expect(resolved).toBe(true);
   });
 
+  it("dumps error reasons and log paths to scrollback (after alt-screen exit) when 'l' is pressed", async () => {
+    const writes: string[] = [];
+    let keyHandler: ((k: string) => void) | null = null;
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [],
+      failed: [
+        {
+          issue: 40,
+          category: "reviewer-refused",
+          reason: "AC3 unverified",
+          logPath: ".afk-loop/logs/issue-40/",
+        },
+        {
+          issue: 41,
+          category: "implementer-incomplete",
+          reason: "max turns reached",
+          logPath: ".afk-loop/logs/issue-41/",
+        },
+      ],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+
+    const promise = watchLoop({
+      readStatus: () => status,
+      write: (s) => writes.push(s),
+      onKey: (h) => {
+        keyHandler = h;
+        return () => {};
+      },
+      setInterval: () => () => {},
+    });
+
+    keyHandler!("l");
+    await promise;
+
+    const all = writes.join("");
+    const exitIdx = all.indexOf("\x1b[?1049l");
+    expect(exitIdx).toBeGreaterThanOrEqual(0);
+    const afterExit = all.slice(exitIdx);
+    expect(afterExit).toContain("AC3 unverified");
+    expect(afterExit).toContain(".afk-loop/logs/issue-40/");
+    expect(afterExit).toContain("max turns reached");
+    expect(afterExit).toContain(".afk-loop/logs/issue-41/");
+  });
+
   it("wraps output in alt-screen enter (start) and exit (end) escape sequences", async () => {
     const writes: string[] = [];
     let keyHandler: ((k: string) => void) | null = null;
