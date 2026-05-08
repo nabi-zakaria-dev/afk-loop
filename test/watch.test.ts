@@ -146,6 +146,21 @@ describe("renderFrame", () => {
     expect(frame).toContain(".afk-loop/logs/issue-40/reviewer-iter-1.jsonl");
   });
 
+  it("shows a RATE-LIMITED banner in the header when runState is 'paused'", () => {
+    const status: StatusJson = {
+      currentIteration: 2,
+      frontier: [],
+      inFlight: [],
+      rateLimitedUntil: "2026-05-08T15:42:00Z",
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "paused",
+    };
+    const frame = renderFrame(status);
+    expect(frame).toContain("RATE-LIMITED");
+    expect(frame).toContain("2026-05-08T15:42:00Z");
+    expect(frame).toContain("⚠");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,

@@ -44,6 +44,9 @@ export interface StatusJson {
   queued?: QueuedItem[];
   done?: DoneItem[];
   failed?: FailedItem[];
+  rateLimitedUntil?: string;
+  runtimeBudgetHours?: number;
+  runtimeElapsedHours?: number;
   lastEventAt: string;
   runState: "running" | "paused" | "done" | "failed";
 }
