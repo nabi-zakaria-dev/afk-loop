@@ -161,6 +161,45 @@ describe("renderFrame", () => {
     expect(frame).toContain("⚠");
   });
 
+  it("shows a CYCLE DETECTED banner when runState is 'failed'", () => {
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "failed",
+    };
+    const frame = renderFrame(status);
+    expect(frame).toContain("CYCLE DETECTED");
+    expect(frame).toContain("✗");
+  });
+
+  it("shows a STALE banner when lastEventAt is older than 5 minutes and runState is 'running'", () => {
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [],
+      lastEventAt: "2026-05-08T14:00:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status, { now: new Date("2026-05-08T14:30:00Z") });
+    expect(frame).toContain("STALE");
+    expect(frame).toContain("✗");
+  });
+
+  it("shows a 'complete' banner when runState is 'done'", () => {
+    const status: StatusJson = {
+      currentIteration: 3,
+      frontier: [],
+      inFlight: [],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "done",
+    };
+    const frame = renderFrame(status);
+    expect(frame).toMatch(/complete/i);
+    expect(frame).toContain("summary.md");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,
