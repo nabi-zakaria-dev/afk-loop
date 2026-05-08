@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { InFlightItem, StatusJson } from "./observability.ts";
 
 export interface RenderOpts {
@@ -10,6 +12,16 @@ export interface WatchLoopDeps {
   write: (s: string) => void;
   onKey: (handler: (key: string) => void) => () => void;
   setInterval: (fn: () => void, ms: number) => () => void;
+}
+
+export interface RunWatchDeps {
+  cwd: string;
+  log: (s: string) => void;
+  loop: () => Promise<void>;
+}
+
+export async function runWatch(_deps: RunWatchDeps): Promise<number> {
+  throw new Error("not implemented");
 }
 
 export const TICK_MS = 3000;

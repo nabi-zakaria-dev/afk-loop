@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderFrame, watchLoop } from "../src/watch.ts";
+import { renderFrame, runWatch, watchLoop } from "../src/watch.ts";
 import { writeStatus, type StatusJson, type InFlightItem } from "../src/observability.ts";
 
 const mkDir = (): string => mkdtempSync(join(tmpdir(), "afk-watch-"));
@@ -146,6 +146,27 @@ describe("watchLoop", () => {
     // Exit must come after enter
     const all = writes.join("");
     expect(all.indexOf("\x1b[?1049l")).toBeGreaterThan(all.indexOf("\x1b[?1049h"));
+  });
+});
+
+describe("runWatch", () => {
+  it("invokes the loop and returns 0 when status.json exists", async () => {
+    const dir = mkDir();
+    try {
+      writeStatus(dir, baseStatus(1));
+      let loopCalled = false;
+      const exitCode = await runWatch({
+        cwd: dir,
+        log: () => {},
+        loop: async () => {
+          loopCalled = true;
+        },
+      });
+      expect(loopCalled).toBe(true);
+      expect(exitCode).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
