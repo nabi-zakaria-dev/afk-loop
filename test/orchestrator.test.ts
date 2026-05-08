@@ -286,4 +286,31 @@ describe("orchestrator status.json inFlight", () => {
       repo.cleanup();
     }
   });
+
+  it("writes failed[] with category and reason when an implementer fails", async () => {
+    const repo = mkTmpRepo();
+    try {
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(40)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "incomplete" }),
+      });
+      const path = join(repo.dir, ".afk-loop", "status.json");
+      const status = JSON.parse(readFileSync(path, "utf8")) as StatusJson;
+      const failed = status.failed as FailedItem[] | undefined;
+      expect(failed).toBeDefined();
+      const entry = failed!.find((f) => f.issue === 40);
+      expect(entry).toBeDefined();
+      expect(entry!.category).toBe("implementer-incomplete");
+      expect(entry!.logPath).toContain("issue-40");
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
