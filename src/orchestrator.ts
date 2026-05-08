@@ -21,6 +21,8 @@ import {
   type NotifyEvent,
   type InFlightItem,
   type QueuedItem,
+  type DoneItem,
+  type FailedItem,
 } from "./observability.ts";
 import { execFileSync } from "node:child_process";
 
@@ -356,6 +358,8 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
   if (obs) writeStatus(opts.cwd, { currentIteration: 0, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "running" });
 
   const iterations: IterationOutcome[] = [];
+  const runDone: DoneItem[] = [];
+  const runFailed: FailedItem[] = [];
   let i = 1;
   while (true) {
     const failedThisRun = opts.failedThisRun ?? state.failedThisRun;
@@ -376,6 +380,11 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
           if (sha) commitUrls[issueNum] = commitUrl(repoSlug, sha);
         }
       }
+      for (const n of merged) {
+        const item: DoneItem = { issue: n, outcome: "merged" };
+        if (commitUrls[n]) item.commitUrl = commitUrls[n];
+        runDone.push(item);
+      }
       const section = formatIterationSection({
         iteration: outcome.iteration,
         merged,
@@ -390,6 +399,8 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
         currentIteration: outcome.iteration,
         frontier: outcome.frontier.map((iss) => iss.number),
         inFlight: [],
+        done: runDone,
+        failed: runFailed,
         lastEventAt: new Date().toISOString(),
         runState: outcome.rateLimited ? "paused" : "running",
       });
@@ -401,14 +412,14 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
       if (obs) appendSummarySection(opts.cwd, `\n## Run aborted: CYCLE\nCycle in dep-graph: ${JSON.stringify(outcome.cycleDetected)}\n`);
       progress("runFinished", `run aborted: CYCLE detected in dep-graph`);
       notify("runFinished", `AFK loop aborted: cycle detected in dep-graph`);
-      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "failed" });
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "failed" });
       return { exit: "CYCLE", iterations };
     }
 
     if (outcome.rateLimited) {
       progress("rateLimitPaused", `rate-limited — pausing until ${state.rateLimitedUntil ?? "unknown"}`);
       if (opts.once) {
-        if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "paused" });
+        if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "paused" });
         progress("runFinished", "run exited: RATE_LIMITED (--once)");
         return { exit: "RATE_LIMITED", iterations };
       }
@@ -425,13 +436,13 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
     }
     if (outcome.frontier.length === 0) {
       if (obs) appendSummarySection(opts.cwd, `\n## Run complete: DONE\n`);
-      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "done" });
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "done" });
       progress("runFinished", `run complete: DONE after ${i} iteration(s)`);
       notify("runFinished", "AFK loop finished");
       return { exit: "DONE", iterations };
     }
     if (opts.once) {
-      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "done" });
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "done" });
       progress("runFinished", "run complete: DONE (--once)");
       notify("runFinished", "AFK loop finished (once)");
       return { exit: "DONE", iterations };
