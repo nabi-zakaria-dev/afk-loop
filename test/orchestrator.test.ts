@@ -261,4 +261,29 @@ describe("orchestrator status.json inFlight", () => {
       repo.cleanup();
     }
   });
+
+  it("writes done[] with merged issues after the iteration completes", async () => {
+    const repo = mkTmpRepo();
+    try {
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(42)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+      });
+      const path = join(repo.dir, ".afk-loop", "status.json");
+      const status = JSON.parse(readFileSync(path, "utf8")) as StatusJson;
+      const done = status.done as DoneItem[] | undefined;
+      expect(done).toBeDefined();
+      expect(done!.find((d) => d.issue === 42)).toBeDefined();
+      expect(done!.find((d) => d.issue === 42)!.outcome).toBe("merged");
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
