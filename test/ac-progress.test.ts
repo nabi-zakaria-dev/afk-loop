@@ -23,7 +23,7 @@ Stuff.
     expect(acs[0]).toMatchObject({ n: 1, title: "Returns 401 when token missing", layer: "API", state: "pending" });
     expect(acs[1]).toMatchObject({ n: 2, title: "Shows error toast", layer: "UI", state: "pending" });
     expect(acs[2]).toMatchObject({ n: 3, title: "Plain criterion with no layer", state: "pending" });
-    expect(acs[2].layer).toBeUndefined();
+    expect(acs[2]!.layer).toBeUndefined();
   });
 });
 

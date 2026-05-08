@@ -23,6 +23,7 @@ import {
   type QueuedItem,
   type DoneItem,
   type FailedItem,
+  type StatusJson,
 } from "./observability.ts";
 import { parseAcceptanceCriteria } from "./ac-progress.ts";
 import { execFileSync } from "node:child_process";
@@ -439,14 +440,25 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
       if (obs) appendSummarySection(opts.cwd, `\n## Run aborted: CYCLE\nCycle in dep-graph: ${JSON.stringify(outcome.cycleDetected)}\n`);
       progress("runFinished", `run aborted: CYCLE detected in dep-graph`);
       notify("runFinished", `AFK loop aborted: cycle detected in dep-graph`);
-      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "failed" });
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, runtimeBudgetHours: opts.config.runtimeBudgetHours, lastEventAt: new Date().toISOString(), runState: "failed" });
       return { exit: "CYCLE", iterations };
     }
 
     if (outcome.rateLimited) {
       progress("rateLimitPaused", `rate-limited — pausing until ${state.rateLimitedUntil ?? "unknown"}`);
       if (opts.once) {
-        if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "paused" });
+        const pausedStatus: StatusJson = {
+          currentIteration: i,
+          frontier: [],
+          inFlight: [],
+          done: runDone,
+          failed: runFailed,
+          runtimeBudgetHours: opts.config.runtimeBudgetHours,
+          lastEventAt: new Date().toISOString(),
+          runState: "paused",
+        };
+        if (state.rateLimitedUntil) pausedStatus.rateLimitedUntil = state.rateLimitedUntil;
+        if (obs) writeStatus(opts.cwd, pausedStatus);
         progress("runFinished", "run exited: RATE_LIMITED (--once)");
         return { exit: "RATE_LIMITED", iterations };
       }
@@ -463,13 +475,13 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
     }
     if (outcome.frontier.length === 0) {
       if (obs) appendSummarySection(opts.cwd, `\n## Run complete: DONE\n`);
-      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "done" });
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, runtimeBudgetHours: opts.config.runtimeBudgetHours, lastEventAt: new Date().toISOString(), runState: "done" });
       progress("runFinished", `run complete: DONE after ${i} iteration(s)`);
       notify("runFinished", "AFK loop finished");
       return { exit: "DONE", iterations };
     }
     if (opts.once) {
-      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, lastEventAt: new Date().toISOString(), runState: "done" });
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], done: runDone, failed: runFailed, runtimeBudgetHours: opts.config.runtimeBudgetHours, lastEventAt: new Date().toISOString(), runState: "done" });
       progress("runFinished", "run complete: DONE (--once)");
       notify("runFinished", "AFK loop finished (once)");
       return { exit: "DONE", iterations };
