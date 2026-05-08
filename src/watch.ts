@@ -100,7 +100,18 @@ function formatInFlight(item: InFlightItem, now: Date): string {
   const phase = PHASE_LABEL[item.phase];
   const elapsedMs = now.getTime() - new Date(item.lastTransitionAt).getTime();
   const elapsed = formatElapsed(elapsedMs);
-  return `#${item.issue} [${phase}] ${item.title} · ${elapsed}`;
+  const ac = formatAcSegment(item);
+  return `#${item.issue} [${phase}] ${item.title}${ac} · ${elapsed}`;
+}
+
+function formatAcSegment(item: InFlightItem): string {
+  if (!item.acs || item.acs.length === 0) return "";
+  const total = item.acs.length;
+  const greenLike = item.acs.filter((a) => a.state === "green" || a.state === "refactored").length;
+  const current = item.acs.find((a) => a.state === "red") ?? item.acs.find((a) => a.state === "pending");
+  if (!current) return ` · ${greenLike}/${total}`;
+  const stateLabel = current.state === "red" ? "RED" : "pending";
+  return ` · ${greenLike}/${total} · AC${current.n} ${stateLabel}`;
 }
 
 function formatElapsed(ms: number): string {
