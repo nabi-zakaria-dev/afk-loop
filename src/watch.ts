@@ -13,13 +13,17 @@ export interface WatchLoopDeps {
 }
 
 export const TICK_MS = 3000;
+const ALT_SCREEN_ENTER = "\x1b[?1049h";
+const ALT_SCREEN_EXIT = "\x1b[?1049l";
+const CLEAR_AND_HOME = "\x1b[2J\x1b[H";
 
 export function watchLoop(deps: WatchLoopDeps): Promise<void> {
   return new Promise<void>((resolve) => {
+    deps.write(ALT_SCREEN_ENTER);
     const renderOnce = (): void => {
       const status = deps.readStatus();
       if (status === null) return;
-      deps.write(renderFrame(status));
+      deps.write(CLEAR_AND_HOME + renderFrame(status));
     };
     renderOnce();
     const clearTick = deps.setInterval(renderOnce, TICK_MS);
@@ -27,6 +31,7 @@ export function watchLoop(deps: WatchLoopDeps): Promise<void> {
       if (key === "q") {
         clearTick();
         unsubKey();
+        deps.write(ALT_SCREEN_EXIT);
         resolve();
       }
     });
