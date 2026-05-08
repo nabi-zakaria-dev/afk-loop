@@ -62,9 +62,11 @@ const PHASE_LABEL: Record<InFlightItem["phase"], string> = {
   merger: "merge",
 };
 
+const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+
 export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   const now = opts?.now ?? new Date();
-  const header = renderHeader(status);
+  const header = renderHeader(status, now);
 
   const sections: string[] = [header];
   if (status.inFlight.length === 0) {
@@ -96,11 +98,24 @@ export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
   return sections.join("\n");
 }
 
-function renderHeader(status: StatusJson): string {
+function renderHeader(status: StatusJson, now: Date): string {
   const base = `afk-loop · iter ${status.currentIteration} · ${status.runState}`;
   if (status.runState === "paused") {
     const until = status.rateLimitedUntil ? ` until ${status.rateLimitedUntil}` : "";
     return `${base}\n⚠ RATE-LIMITED${until}`;
+  }
+  if (status.runState === "failed") {
+    return `${base}\n✗ CYCLE DETECTED — run aborted`;
+  }
+  if (status.runState === "done") {
+    return `${base}\n✅ run complete — see summary.md`;
+  }
+  if (status.runState === "running") {
+    const ageMs = now.getTime() - new Date(status.lastEventAt).getTime();
+    if (ageMs > STALE_THRESHOLD_MS) {
+      const ageMin = Math.floor(ageMs / 60000);
+      return `${base}\n✗ STALE (last event ${ageMin}m ago — orchestrator may have crashed)`;
+    }
   }
   return base;
 }
