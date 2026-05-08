@@ -168,6 +168,26 @@ describe("runWatch", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("prints 'no run in progress' and returns 0 when status.json is missing", async () => {
+    const dir = mkDir();
+    try {
+      let loopCalled = false;
+      const logs: string[] = [];
+      const exitCode = await runWatch({
+        cwd: dir,
+        log: (s) => logs.push(s),
+        loop: async () => {
+          loopCalled = true;
+        },
+      });
+      expect(loopCalled).toBe(false);
+      expect(logs.join("\n")).toContain("no run in progress");
+      expect(exitCode).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("writeStatus inFlight shape", () => {
