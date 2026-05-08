@@ -200,6 +200,49 @@ describe("renderFrame", () => {
     expect(frame).toContain("summary.md");
   });
 
+  it("focus mode shows the targeted issue's title and full AC list with states", () => {
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [
+        {
+          issue: 42,
+          title: "Display pending invoices",
+          phase: "implementer",
+          startedAt: "2026-05-08T14:30:00Z",
+          lastTransitionAt: "2026-05-08T14:30:00Z",
+          acs: [
+            { n: 1, title: "first criterion", layer: "UI", state: "green", greenAt: "2026-05-08T14:31:00Z" },
+            { n: 2, title: "second criterion", layer: "API", state: "red", redAt: "2026-05-08T14:31:30Z" },
+          ],
+        },
+      ],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status, { focus: 42 });
+    expect(frame).toContain("Display pending invoices");
+    expect(frame).toContain("AC 1");
+    expect(frame).toContain("first criterion");
+    expect(frame).toContain("AC 2");
+    expect(frame).toContain("second criterion");
+    expect(frame).toContain("green");
+    expect(frame).toContain("red");
+  });
+
+  it("focus mode prints 'issue #N is not in flight' when target is not in-flight", () => {
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status, { focus: 99 });
+    expect(frame).toContain("#99");
+    expect(frame).toContain("not in flight");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,

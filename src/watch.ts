@@ -5,6 +5,7 @@ import type { InFlightItem, StatusJson } from "./observability.ts";
 export interface RenderOpts {
   now?: Date;
   width?: number;
+  focus?: number;
 }
 
 export interface WatchLoopDeps {
