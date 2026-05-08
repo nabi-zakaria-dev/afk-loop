@@ -1,0 +1,22 @@
+{
+  "name": "afk-loop",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Personal AFK orchestrator for parallel implementation of vertical-slice GitHub issues using Claude Code.",
+  "bin": {
+    "afk-loop": "./main.mts"
+  },
+  "scripts": {
+    "afk-loop": "tsx main.mts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

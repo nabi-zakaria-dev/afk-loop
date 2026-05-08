@@ -1,0 +1,390 @@
+import type { Config } from "./config.ts";
+import { fetchAfkIssues, type Issue } from "./issues.ts";
+import { branchName, computeFrontier, detectCycles } from "./depgraph.ts";
+import { createWorktree, ensureGitignore } from "./worktree.ts";
+import { runImplementer, runReviewer, runAdvisoryPlanner } from "./phases.ts";
+import { mergeBranches, type MergeResult } from "./merger.ts";
+import {
+  loadState,
+  saveState,
+  markFailed,
+  reconcileInFlight,
+  setRateLimitedUntil,
+  type State,
+} from "./state.ts";
+import {
+  appendSummarySection,
+  writeStatus,
+  formatIterationSection,
+  notify as defaultNotify,
+  commitUrl,
+  type NotifyEvent,
+} from "./observability.ts";
+import { execFileSync } from "node:child_process";
+
+export type ExitReason = "DONE" | "TIME_BUDGET" | "CYCLE" | "RATE_LIMITED";
+
+export interface IterationOutcome {
+  iteration: number;
+  frontier: Issue[];
+  implemented: number[];
+  approvedForMerge: number[];
+  failedImplementer: number[];
+  failedReviewer: number[];
+  rateLimited: boolean;
+  rateLimitedUntil?: string;
+  merge?: MergeResult;
+  cycleDetected?: number[][];
+  advisoryConcerns?: string;
+}
+
+export interface RunOpts {
+  cwd: string;
+  config: Config;
+  maxParallel?: number;
+  once?: boolean;
+  fetchIssues?: () => Issue[];
+  ghRun?: (args: string[]) => void;
+  claudeBin?: string;
+  failedThisRun?: number[];
+  /** Test-only hook to override the implementer scenario for a given issue number. */
+  envForIssue?: (issue: Issue) => Record<string, string> | undefined;
+  /** Async sleep injected for tests; defaults to setTimeout-based wait. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Test override of "now" used for rate-limit math. */
+  now?: () => number;
+  /** Notification callback (defaults to osascript on macOS, no-op elsewhere). */
+  notify?: (event: NotifyEvent, message: string) => void;
+  /** Override for repo slug derivation (default: gh repo view nameWithOwner). */
+  repoSlug?: string;
+  /** Disable filesystem observability (summary.md / status.json). For tests. */
+  disableObservability?: boolean;
+}
+
+export interface RunResult {
+  exit: ExitReason;
+  iterations: IterationOutcome[];
+}
+
+export async function runIteration(opts: RunOpts, iteration: number): Promise<IterationOutcome> {
+  const cap = Math.min(opts.maxParallel ?? opts.config.maxParallel, opts.config.maxParallel);
+  const fetcher = opts.fetchIssues ?? (() => fetchAfkIssues({
+    label: opts.config.label,
+    hitlPattern: opts.config.hitlPattern,
+    cwd: opts.cwd,
+  }));
+  const issues = fetcher();
+  const cycles = detectCycles(issues);
+  if (cycles.length > 0) {
+    return {
+      iteration,
+      frontier: [],
+      implemented: [],
+      approvedForMerge: [],
+      failedImplementer: [],
+      failedReviewer: [],
+      rateLimited: false,
+      cycleDetected: cycles,
+    };
+  }
+  const frontier = computeFrontier(issues, { maxParallel: cap, failedThisRun: opts.failedThisRun ?? [] });
+  if (frontier.length === 0) {
+    return {
+      iteration,
+      frontier: [],
+      implemented: [],
+      approvedForMerge: [],
+      failedImplementer: [],
+      failedReviewer: [],
+      rateLimited: false,
+    };
+  }
+
+  ensureGitignore(opts.cwd);
+
+  let advisoryConcerns: string | undefined;
+  if (opts.config.advisoryPlanner && frontier.length > 0) {
+    const advCall: Parameters<typeof runAdvisoryPlanner>[0] = {
+      targetDir: opts.cwd,
+      iteration,
+      frontier,
+    };
+    if (opts.claudeBin !== undefined) advCall.claudeBin = opts.claudeBin;
+    const adv = await runAdvisoryPlanner(advCall);
+    advisoryConcerns = adv.concerns;
+  }
+
+  // Pre-create worktrees serially — git's index lock makes concurrent
+  // worktree creation flaky. Implementers and reviewers can then run
+  // in parallel against pre-existing worktrees safely.
+  for (const issue of frontier) {
+    createWorktree(opts.cwd, issue.number, opts.config.mainBranch);
+  }
+
+  const implResults = await Promise.allSettled(
+    frontier.map(async (issue) => {
+      const env = opts.envForIssue?.(issue);
+      const implCall: Parameters<typeof runImplementer>[0] = {
+        targetDir: opts.cwd,
+        issue,
+        mainBranch: opts.config.mainBranch,
+        maxTurns: opts.config.maxTurnsPerImplementer,
+        iteration,
+      };
+      if (opts.claudeBin !== undefined) implCall.claudeBin = opts.claudeBin;
+      if (env !== undefined) implCall.env = env;
+      const result = await runImplementer(implCall);
+      return { issue, result };
+    }),
+  );
+
+  const implemented: number[] = [];
+  const failedImpl: number[] = [];
+  const failedRev: number[] = [];
+  const approved: { number: number; branch: string; title: string }[] = [];
+  let rateLimited = false;
+  let rateLimitedUntil: string | undefined;
+  const toReview: Issue[] = [];
+
+  for (const settled of implResults) {
+    if (settled.status === "rejected") continue;
+    const { issue, result } = settled.value;
+    if (result.outcome === "rate-limited") {
+      rateLimited = true;
+      if (result.rateLimitedUntil !== undefined && rateLimitedUntil === undefined) {
+        rateLimitedUntil = result.rateLimitedUntil;
+      }
+      continue;
+    }
+    if (result.outcome === "complete" && result.commits.length > 0) {
+      implemented.push(issue.number);
+      toReview.push(issue);
+    } else {
+      failedImpl.push(issue.number);
+    }
+  }
+
+  if (toReview.length > 0) {
+    const revResults = await Promise.allSettled(
+      toReview.map(async (issue) => {
+        const env = opts.envForIssue?.(issue);
+        const revCall: Parameters<typeof runReviewer>[0] = {
+          targetDir: opts.cwd,
+          issue,
+          mainBranch: opts.config.mainBranch,
+          iteration,
+        };
+        if (opts.claudeBin !== undefined) revCall.claudeBin = opts.claudeBin;
+        if (env !== undefined) revCall.env = env;
+        const result = await runReviewer(revCall);
+        return { issue, result };
+      }),
+    );
+
+    for (const settled of revResults) {
+      if (settled.status === "rejected") continue;
+      const { issue, result } = settled.value;
+      if (result.outcome === "rate-limited") {
+        rateLimited = true;
+        if (result.rateLimitedUntil !== undefined && rateLimitedUntil === undefined) {
+          rateLimitedUntil = result.rateLimitedUntil;
+        }
+        continue;
+      }
+      if (result.outcome === "complete") {
+        approved.push({ number: issue.number, branch: branchName(issue), title: issue.title });
+      } else {
+        failedRev.push(issue.number);
+      }
+    }
+  }
+
+  let merge: MergeResult | undefined;
+  if (approved.length > 0) {
+    const mergeOpts: Parameters<typeof mergeBranches>[0] = {
+      cwd: opts.cwd,
+      mainBranch: opts.config.mainBranch,
+      branches: approved.map((a) => a.branch),
+      issues: approved,
+    };
+    if (opts.ghRun !== undefined) mergeOpts.ghRun = opts.ghRun;
+    merge = mergeBranches(mergeOpts);
+  }
+
+  const out: IterationOutcome = {
+    iteration,
+    frontier,
+    implemented,
+    approvedForMerge: approved.map((a) => a.number),
+    failedImplementer: failedImpl,
+    failedReviewer: failedRev,
+    rateLimited,
+  };
+  if (rateLimitedUntil !== undefined) out.rateLimitedUntil = rateLimitedUntil;
+  if (merge !== undefined) out.merge = merge;
+  if (advisoryConcerns !== undefined) out.advisoryConcerns = advisoryConcerns;
+  return out;
+}
+
+export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
+  const sleep = opts.sleep ?? defaultSleep;
+  const now = opts.now ?? Date.now;
+  const notify = opts.notify ?? ((event: NotifyEvent, msg: string) => defaultNotify(event, msg));
+  const budgetMs = opts.config.runtimeBudgetHours * 60 * 60 * 1000;
+  const startedAt = now();
+  const obs = !opts.disableObservability;
+  const repoSlug = opts.repoSlug ?? deriveRepoSlug(opts.cwd);
+
+  // Hydrate persisted state and reconcile orphans before any new work starts.
+  let state = reconcileInFlight(loadState(opts.cwd));
+  saveState(opts.cwd, state);
+
+  // If we crashed/exited during a previous rate-limit pause, sleep the remainder.
+  await waitOutRateLimit(state, sleep, now, notify);
+
+  // Initial run-started notification + status.
+  notify("runStarted", "AFK loop started");
+  if (obs) writeStatus(opts.cwd, { currentIteration: 0, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "running" });
+
+  const iterations: IterationOutcome[] = [];
+  let i = 1;
+  while (true) {
+    const failedThisRun = opts.failedThisRun ?? state.failedThisRun;
+    const outcome = await runIteration({ ...opts, failedThisRun }, i);
+    iterations.push(outcome);
+
+    state = applyOutcomeToState(state, outcome);
+    saveState(opts.cwd, state);
+
+    // Per-iteration observability: summary section + live status.
+    if (obs) {
+      const commitUrls: Record<number, string> = {};
+      const merged = outcome.merge?.merged ?? [];
+      const failedMerge = outcome.merge?.failed ?? [];
+      if (repoSlug) {
+        for (const issueNum of merged) {
+          const sha = lastCommitOnBranch(opts.cwd, `afk/issue-${issueNum}`);
+          if (sha) commitUrls[issueNum] = commitUrl(repoSlug, sha);
+        }
+      }
+      const section = formatIterationSection({
+        iteration: outcome.iteration,
+        merged,
+        failedImplementer: outcome.failedImplementer,
+        failedReviewer: outcome.failedReviewer,
+        mergeFailed: failedMerge,
+        advisoryConcerns: outcome.advisoryConcerns,
+        commitUrls,
+      });
+      appendSummarySection(opts.cwd, section);
+      writeStatus(opts.cwd, {
+        currentIteration: outcome.iteration,
+        frontier: outcome.frontier.map((iss) => iss.number),
+        inFlight: [],
+        lastEventAt: new Date().toISOString(),
+        runState: outcome.rateLimited ? "paused" : "running",
+      });
+      const summary = `iter ${outcome.iteration}: ${merged.length} merged, ${outcome.failedImplementer.length + outcome.failedReviewer.length + failedMerge.length} failed`;
+      notify("iterationCompleted", summary);
+    }
+
+    if (outcome.cycleDetected && outcome.cycleDetected.length > 0) {
+      if (obs) appendSummarySection(opts.cwd, `\n## Run aborted: CYCLE\nCycle in dep-graph: ${JSON.stringify(outcome.cycleDetected)}\n`);
+      notify("runFinished", `AFK loop aborted: cycle detected in dep-graph`);
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "failed" });
+      return { exit: "CYCLE", iterations };
+    }
+
+    if (outcome.rateLimited) {
+      if (opts.once) {
+        if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "paused" });
+        return { exit: "RATE_LIMITED", iterations };
+      }
+      await waitOutRateLimit(state, sleep, now, notify);
+      state = setRateLimitedUntil(state, null);
+      saveState(opts.cwd, state);
+      if (now() - startedAt >= budgetMs) {
+        if (obs) appendSummarySection(opts.cwd, `\n## Run complete: TIME_BUDGET\n`);
+        notify("runFinished", "AFK loop exited: TIME_BUDGET");
+        return { exit: "TIME_BUDGET", iterations };
+      }
+      i++;
+      continue;
+    }
+    if (outcome.frontier.length === 0) {
+      if (obs) appendSummarySection(opts.cwd, `\n## Run complete: DONE\n`);
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "done" });
+      notify("runFinished", "AFK loop finished");
+      return { exit: "DONE", iterations };
+    }
+    if (opts.once) {
+      if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "done" });
+      notify("runFinished", "AFK loop finished (once)");
+      return { exit: "DONE", iterations };
+    }
+    if (now() - startedAt >= budgetMs) {
+      if (obs) appendSummarySection(opts.cwd, `\n## Run complete: TIME_BUDGET\n`);
+      notify("runFinished", "AFK loop exited: TIME_BUDGET");
+      return { exit: "TIME_BUDGET", iterations };
+    }
+    i++;
+  }
+}
+
+function deriveRepoSlug(cwd: string): string | undefined {
+  try {
+    const out = execFileSync("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return out.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function lastCommitOnBranch(cwd: string, branch: string): string | undefined {
+  try {
+    const out = execFileSync("git", ["log", "-n", "1", "--format=%H", branch], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return out.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function waitOutRateLimit(
+  state: State,
+  sleep: (ms: number) => Promise<void>,
+  now: () => number,
+  notify: (event: NotifyEvent, message: string) => void,
+): Promise<void> {
+  if (!state.rateLimitedUntil) return;
+  const target = Date.parse(state.rateLimitedUntil);
+  if (!Number.isFinite(target)) return;
+  const ms = target - now();
+  if (ms <= 0) return;
+  notify("rateLimitPaused", `AFK loop paused until ${state.rateLimitedUntil} (${Math.round(ms / 60000)}min)`);
+  await sleep(ms);
+}
+
+const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+function applyOutcomeToState(state: State, outcome: IterationOutcome): State {
+  let next = state;
+  for (const issueNum of outcome.failedImplementer) next = markFailed(next, issueNum);
+  for (const issueNum of outcome.failedReviewer) next = markFailed(next, issueNum);
+  if (outcome.merge) {
+    for (const failure of outcome.merge.failed) next = markFailed(next, failure.issue);
+  }
+  if (outcome.rateLimited && outcome.rateLimitedUntil) {
+    next = setRateLimitedUntil(next, outcome.rateLimitedUntil);
+  } else if (!outcome.rateLimited && next.rateLimitedUntil !== null) {
+    next = setRateLimitedUntil(next, null);
+  }
+  return next;
+}

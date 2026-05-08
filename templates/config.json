@@ -1,0 +1,9 @@
+{
+  "label": "AFK",
+  "hitlPattern": "\\[HITL\\]",
+  "mainBranch": "main",
+  "maxParallel": 3,
+  "maxTurnsPerImplementer": 50,
+  "advisoryPlanner": false,
+  "runtimeBudgetHours": 8
+}
