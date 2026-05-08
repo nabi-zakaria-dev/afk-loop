@@ -20,6 +20,7 @@ import {
   commitUrl,
   type NotifyEvent,
   type InFlightItem,
+  type QueuedItem,
 } from "./observability.ts";
 import { execFileSync } from "node:child_process";
 
@@ -170,10 +171,16 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
         lastTransitionAt: startedAt,
       });
     }
+    const frontierNumbers = new Set(frontier.map((i) => i.number));
+    const failedSet = new Set(opts.failedThisRun ?? []);
+    const queued: QueuedItem[] = issues
+      .filter((i) => !frontierNumbers.has(i.number) && !i.isHITL && !failedSet.has(i.number))
+      .map((i) => ({ issue: i.number, title: i.title }));
     writeStatus(opts.cwd, {
       currentIteration: iteration,
       frontier: frontier.map((i) => i.number),
       inFlight: [...inFlightByIssue.values()],
+      queued,
       lastEventAt: startedAt,
       runState: "running",
     });
