@@ -79,6 +79,22 @@ describe("renderFrame", () => {
     expect(frame).toContain("Bulk-archive");
   });
 
+  it("renders a RECENT section with merged ✅ entries and commit URL", () => {
+    const status: StatusJson = {
+      currentIteration: 2,
+      frontier: [],
+      inFlight: [],
+      done: [{ issue: 41, outcome: "merged", commitUrl: "https://example.com/c/abc123" }],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status);
+    expect(frame).toContain("RECENT");
+    expect(frame).toContain("✅");
+    expect(frame).toContain("#41");
+    expect(frame).toContain("https://example.com/c/abc123");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,
