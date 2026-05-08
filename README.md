@@ -2,7 +2,7 @@
 
 Personal AFK orchestrator that takes vertical-slice GitHub issues produced by `/grill-with-docs` → `/to-prd` → `/to-issues` and implements them in parallel using Claude Code (subscription, no API key). Walk away from the laptop, come back to a `summary.md` that tells you whether to celebrate or investigate.
 
-See `DESIGN.md` for the full architecture. See `PRD.md` for the problem statement and user stories. See `ISSUES.md` for the implementation slices and their status.
+See `DESIGN.md` for the full architecture, `PRD.md` for the problem statement and user stories, `ISSUES.md` for the implementation slices and their status, `CONTEXT.md` for the domain glossary, and `docs/adr/` for architectural decisions.
 
 ## Prerequisites
 
@@ -14,19 +14,40 @@ See `DESIGN.md` for the full architecture. See `PRD.md` for the problem statemen
 
 ## Install
 
+Globally from GitHub:
+
 ```bash
-git clone <this-repo>  # or wherever afk-loop lives
+npm install -g github:nabi-zakaria-dev/afk-loop
+```
+
+This puts `afk-loop` on your `PATH`. You can now run `afk-loop <subcommand>` from inside any target repo.
+
+To update:
+
+```bash
+npm install -g github:nabi-zakaria-dev/afk-loop
+```
+
+(Same command — npm refreshes from main.)
+
+To uninstall:
+
+```bash
+npm uninstall -g afk-loop
+```
+
+### Local development install
+
+If you cloned this repo and want to test changes locally:
+
+```bash
+git clone https://github.com/nabi-zakaria-dev/afk-loop
 cd afk-loop
 npm install
+npm link
 ```
 
-There is no global install. You invoke `afk-loop` via `npx tsx /path/to/afk-loop/main.mts <subcommand>` from inside the target repo.
-
-For convenience add a shell alias:
-
-```bash
-alias afk-loop='npx tsx /Users/you/projects/afk-loop/main.mts'
-```
+`npm link` symlinks the local checkout as the global `afk-loop`. Edits to source take effect immediately — no rebuild.
 
 ## Quickstart
 
@@ -106,6 +127,19 @@ Wake up. Read `.afk-loop/summary.md`. Investigate any `⚠️` lines. The succes
 
 `.afk-loop/` is added to your repo's `.gitignore` automatically by `afk-loop init`.
 
+## TDD discipline (mechanical, not advisory)
+
+Every implementer is instructed via inlined doctrine in `prompts/implement-prompt.md` to follow Test-Driven Development with a strict commit shape:
+
+1. **RED** — write one failing test, commit a *test-only* commit (or test + stub-escape-hatch).
+2. **GREEN** — write the implementation, commit a non-test-source commit.
+3. **REFACTOR (optional)** — clean up only files this issue touched, commit.
+4. Repeat per acceptance criterion.
+
+The reviewer (`prompts/review-prompt.md`) **mechanically verifies the discipline from artifacts** — it runs `git log --reverse main..HEAD --name-only` and refuses any branch where a test file lacks a preceding test-only commit. Auto-skipped for non-behavioral branches (refactor / docs / config) where no test files were added or modified.
+
+This was the result of a deliberate design trade-off — see `docs/adr/0001-inline-tdd-doctrine-and-artifact-evidence.md`.
+
 ## Failure recovery (the morning workflow)
 
 When `summary.md` lists `⚠️` issues:
@@ -132,16 +166,16 @@ If anything destructive happens even once, switch to Docker. Until then, host-on
 
 ## Architecture
 
-The orchestrator is a single-file ~600 LOC TS module driven by composable phases:
+The orchestrator is composable phases:
 
 ```
 plan (deterministic dep-graph)
    ↓
 [advisory planner — optional, never overrides]
    ↓
-implementer × N  (parallel, in worktrees)
+implementer × N  (parallel, in worktrees, with TDD)
    ↓
-reviewer × M     (parallel, M ≤ N)
+reviewer × M     (parallel, M ≤ N; verifies AC + TDD evidence)
    ↓
 merger           (serial, into main, revert-and-continue per branch)
    ↓
@@ -149,6 +183,21 @@ state + summary + status + notification
 ```
 
 See `DESIGN.md` for the full decision tree.
+
+## Conventions
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` — new feature or capability (typically GREEN commits in TDD).
+- `fix:` — bug fix.
+- `refactor:` — internal restructure, no behavior change.
+- `test:` — test-only change (RED commits in TDD).
+- `docs:` — README, ADR, comments only.
+- `chore:` — build, deps, tooling.
+
+Optional scope: `feat(reviewer):`, `fix(worktree):`.
+
+Granularity: one logical change per commit. RED test, GREEN impl, and REFACTOR are typically three separate commits — the same shape the reviewer mechanically verifies on AFK branches.
 
 ## Testing
 
@@ -160,9 +209,9 @@ npm run typecheck
 
 Tests use `mkTmpRepo` (a fresh `git init`'d throwaway dir) and a mock `claude` shell script that emits canned JSONL events. No real `claude`, `gh`, or GitHub state is touched during tests.
 
-## Status of the implementation
+## Status
 
-See `ISSUES.md` for the per-slice breakdown. All 14 vertical slices complete with passing tests.
+See `ISSUES.md` for the per-slice breakdown. All initial 14 vertical slices complete with passing tests; subsequent feature commits land per the Conventional Commits convention above.
 
 ## Revisit-Docker trigger
 
