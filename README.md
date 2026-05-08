@@ -83,6 +83,7 @@ Wake up. Read `.afk-loop/summary.md`. Investigate any `⚠️` lines. The succes
 | `afk-loop review <N>` | Run the reviewer on the issue's existing AFK branch. Outputs `approved` or `refused`. |
 | `afk-loop merge --branches <list>` | Merge approved AFK branches into main, with per-branch revert-and-continue on conflict. Closes issues on success. |
 | `afk-loop run [--once] [--max-parallel N]` | The full orchestration loop. Default: parallel cap 3, multi-iteration, 8h time budget, rate-limit pause-and-resume. |
+| `afk-loop watch [--focus <N>]` | Live progress dashboard. Alt-screen TTY view of the running loop, refreshed every 3s from `.afk-loop/status.json`. `q` quits, `l` dumps the error list to scrollback before quitting. |
 | `afk-loop migrate-labels --from <X> --to <Y> [--dry-run]` | Bulk-relabel open issues. |
 | `afk-loop help` | Show the help message. |
 
@@ -120,12 +121,71 @@ Wake up. Read `.afk-loop/summary.md`. Investigate any `⚠️` lines. The succes
 ├── CODING_STANDARDS.md     # optional, reviewer reads if present
 ├── state.json              # rateLimitedUntil, inFlight, failedThisRun
 ├── summary.md              # append-only run log — wake-up artifact
-├── status.json             # live status (overwritten each tick)
+├── status.json             # live status (overwritten each phase boundary; consumed by `afk-loop watch`)
 ├── logs/issue-N/*.jsonl    # JSONL streams from `claude -p --output-format stream-json`
 └── worktrees/issue-N/      # git worktree, branch=afk/issue-N
 ```
 
 `.afk-loop/` is added to your repo's `.gitignore` automatically by `afk-loop init`.
+
+## Live progress dashboard (`afk-loop watch`)
+
+`afk-loop run` is designed to be left alone — you walk away and read `summary.md` later. But there's a gap between "running" and "done" where you might want a quick glance at how things are going. That's what `afk-loop watch` is for.
+
+In any target repo where the loop is running:
+
+```bash
+afk-loop watch
+```
+
+The terminal switches to an alt-screen buffer (your scrollback is preserved) and renders a dashboard that refreshes every 3 seconds reading from `.afk-loop/status.json`. Example frame:
+
+```
+afk-loop · iter 2 · running
+#42 [impl] Display pending invoices · 1/3 · AC2 RED · 1m 12s
+#43 [review] Cancel a subscription · 5/5 · 3m 47s
+QUEUE (1)
+  #44 Send invoice reminder
+RECENT
+  ✅ #41 merged · https://github.com/.../commit/abc123
+ERRORS (1)
+  ⚠ #40 reviewer-refused: AC3 unverified · .afk-loop/logs/issue-40/
+```
+
+What each section shows:
+
+- **Header**: iteration number and run state. Overrides for unhealthy run-scoped states:
+  - `⚠ RATE-LIMITED until <ts>` when paused on subscription rate limit.
+  - `✗ CYCLE DETECTED — run aborted` when the dep-graph has a cycle.
+  - `✗ STALE` when no event has fired for >5 minutes while supposedly running (orchestrator may have crashed).
+  - `✅ run complete — see summary.md` when the run is `done`.
+- **In-flight**: one row per issue currently being worked. Format: `#N [phase] title · ACs/total · ACx STATE · elapsed`. Phase is `impl` / `review` / `merge`. AC progress is sourced from `git log` of the issue's worktree, mapping `test:` → RED and `feat:`/`fix:` → GREEN per acceptance criterion (see TDD section below for the `[AC N]` commit-tag convention this relies on).
+- **QUEUE**: open AFK-eligible issues that aren't currently in-flight or failed.
+- **RECENT**: issues merged successfully during this run, with commit URLs.
+- **ERRORS**: issues that failed during this run, with reason and path to the `.afk-loop/logs/issue-N/` JSONL stream so you can investigate.
+
+### Hotkeys
+
+- `q` — exit alt-screen, return to your terminal as it was.
+- `l` — exit alt-screen and dump the ERRORS section (issue + reason + log path) to scrollback before quitting. Useful when you spotted a failure and want the path preserved after the dashboard closes.
+
+### `--focus <issue>`
+
+Zoom into one issue's full acceptance-criteria list:
+
+```bash
+afk-loop watch --focus 42
+```
+
+Shows the issue's title and every AC with its layer tag, current state (`pending` / `red` / `green` / `refactored`), and RED/GREEN timestamps. If `#N` isn't currently in-flight, the dashboard prints `issue #N is not in flight` and exits.
+
+### When status.json is missing
+
+If you run `afk-loop watch` from a directory with no `.afk-loop/status.json` (e.g. before you've ever run the loop), it prints `no run in progress` and exits 0 — no error, no alt-screen flash. Useful for tooling and for distinguishing "loop never ran" from "loop crashed mid-run."
+
+### Granularity caveat
+
+AC progress in the dashboard updates at **phase boundaries** (implementer-start, reviewer-start, merger-start), not every 3 seconds. The 3-second refresh re-reads `status.json` but the underlying AC state only changes when the orchestrator writes a new frame. Mid-implementer commits land in the worktree's git history but don't surface until the implementer phase completes. Live mid-flight polling is a planned follow-up; for now, expect AC counts to jump at boundary transitions.
 
 ## TDD discipline (mechanical, not advisory)
 
@@ -136,15 +196,17 @@ Every implementer is instructed via inlined doctrine in `prompts/implement-promp
 3. **REFACTOR (optional)** — clean up only files this issue touched, commit.
 4. Repeat per acceptance criterion.
 
+Each commit subject also carries an `[AC N]` tag (e.g. `feat: detect cycles [AC 2] (#42)`) where `N` is the 1-based index of the acceptance criterion. The `afk-loop watch` dashboard reads these tags to show live AC progress per in-flight issue. Without the tag, AC mapping falls back to positional pairing of `test:` and `feat:`/`fix:` commits — correct only when the discipline is followed strictly.
+
 The reviewer (`prompts/review-prompt.md`) **mechanically verifies the discipline from artifacts** — it runs `git log --reverse main..HEAD --name-only` and refuses any branch where a test file lacks a preceding test-only commit. Auto-skipped for non-behavioral branches (refactor / docs / config) where no test files were added or modified.
 
 This was the result of a deliberate design trade-off — see `docs/adr/0001-inline-tdd-doctrine-and-artifact-evidence.md`.
 
 ## Failure recovery (the morning workflow)
 
-When `summary.md` lists `⚠️` issues:
+When `summary.md` lists `⚠️` issues (or `afk-loop watch` shows them in the ERRORS section):
 
-1. Read the per-issue JSONL log: `.afk-loop/logs/issue-N/implementer-iter-1.jsonl` (and `reviewer-iter-1.jsonl` if it ran). `grep '"name":"Bash"'` to see every shell command executed.
+1. Read the per-issue JSONL log: `.afk-loop/logs/issue-N/implementer-iter-1.jsonl` (and `reviewer-iter-1.jsonl` if it ran). `grep '"name":"Bash"'` to see every shell command executed. Tip: while in `afk-loop watch`, press `l` to dump the failed issues' reasons and log paths to scrollback before quitting — the path is right there, ready to `cat` or open.
 2. The branch and worktree are preserved. Pick up where the loop got stuck:
    ```bash
    cd .afk-loop/worktrees/issue-N
