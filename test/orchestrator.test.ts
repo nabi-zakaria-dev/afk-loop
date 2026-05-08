@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { mkTmpRepo } from "./helpers/tmp-repo.ts";
 import { runOrchestrator } from "../src/orchestrator.ts";
 import type { Issue } from "../src/issues.ts";
 import type { Config } from "../src/config.ts";
+import type { StatusJson, InFlightItem } from "../src/observability.ts";
 
 const MOCK_CLAUDE = fileURLToPath(new URL("./helpers/mock-claude.sh", import.meta.url));
 
@@ -150,6 +153,44 @@ describe("orchestrator (single iteration, serial)", () => {
         claudeBin: MOCK_CLAUDE,
       });
       expect(result.iterations[0]!.frontier).toEqual([]);
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
+describe("orchestrator status.json inFlight", () => {
+  it("writes inFlight items with phase, startedAt, lastTransitionAt at implementer-start", async () => {
+    const repo = mkTmpRepo();
+    try {
+      let capturedInFlight: InFlightItem[] | null = null;
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(42)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+        progress: (event) => {
+          if (event === "implementerStarted" && capturedInFlight === null) {
+            const path = join(repo.dir, ".afk-loop", "status.json");
+            if (existsSync(path)) {
+              const status = JSON.parse(readFileSync(path, "utf8")) as StatusJson;
+              capturedInFlight = status.inFlight;
+            }
+          }
+        },
+      });
+      expect(capturedInFlight).not.toBeNull();
+      const items = capturedInFlight as unknown as InFlightItem[];
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ issue: 42, phase: "implementer" });
+      expect(items[0]!.title).toBe("Issue 42");
+      expect(items[0]!.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(items[0]!.lastTransitionAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     } finally {
       repo.cleanup();
     }
