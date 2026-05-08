@@ -24,6 +24,7 @@ import {
   type DoneItem,
   type FailedItem,
 } from "./observability.ts";
+import { parseAcceptanceCriteria } from "./ac-progress.ts";
 import { execFileSync } from "node:child_process";
 
 export type ExitReason = "DONE" | "TIME_BUDGET" | "CYCLE" | "RATE_LIMITED";
@@ -171,6 +172,7 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
         phase: "implementer",
         startedAt,
         lastTransitionAt: startedAt,
+        acs: parseAcceptanceCriteria(issue.body),
       });
     }
     const frontierNumbers = new Set(frontier.map((i) => i.number));
