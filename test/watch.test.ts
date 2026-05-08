@@ -2,10 +2,18 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderFrame } from "../src/watch.ts";
+import { renderFrame, watchLoop } from "../src/watch.ts";
 import { writeStatus, type StatusJson, type InFlightItem } from "../src/observability.ts";
 
 const mkDir = (): string => mkdtempSync(join(tmpdir(), "afk-watch-"));
+
+const baseStatus = (iter: number): StatusJson => ({
+  currentIteration: iter,
+  frontier: [],
+  inFlight: [],
+  lastEventAt: "2026-05-08T14:30:00Z",
+  runState: "running",
+});
 
 describe("renderFrame", () => {
   it("includes the current iteration and run state in the header", () => {
@@ -54,6 +62,36 @@ describe("renderFrame", () => {
     };
     const frame = renderFrame(status);
     expect(frame).toContain("no issues in flight");
+  });
+});
+
+describe("watchLoop", () => {
+  it("writes a rendered frame on initial call and on each tick", async () => {
+    const writes: string[] = [];
+    let tickFn: (() => void) | null = null;
+    let keyHandler: ((k: string) => void) | null = null;
+
+    const promise = watchLoop({
+      readStatus: () => baseStatus(5),
+      write: (s) => writes.push(s),
+      onKey: (h) => {
+        keyHandler = h;
+        return () => {};
+      },
+      setInterval: (fn) => {
+        tickFn = fn;
+        return () => {};
+      },
+    });
+
+    expect(writes.join("")).toContain("iter 5");
+
+    const lengthBefore = writes.join("").length;
+    tickFn!();
+    expect(writes.join("").length).toBeGreaterThan(lengthBefore);
+
+    keyHandler!("q");
+    await promise;
   });
 });
 

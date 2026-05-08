@@ -5,6 +5,17 @@ export interface RenderOpts {
   width?: number;
 }
 
+export interface WatchLoopDeps {
+  readStatus: () => StatusJson | null;
+  write: (s: string) => void;
+  onKey: (handler: (key: string) => void) => () => void;
+  setInterval: (fn: () => void, ms: number) => () => void;
+}
+
+export function watchLoop(_deps: WatchLoopDeps): Promise<void> {
+  throw new Error("not implemented");
+}
+
 const PHASE_LABEL: Record<InFlightItem["phase"], string> = {
   implementer: "impl",
   reviewer: "review",
