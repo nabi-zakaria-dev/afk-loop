@@ -95,6 +95,30 @@ describe("renderFrame", () => {
     expect(frame).toContain("https://example.com/c/abc123");
   });
 
+  it("renders an ERRORS section with ⚠ reason and log path", () => {
+    const status: StatusJson = {
+      currentIteration: 2,
+      frontier: [],
+      inFlight: [],
+      failed: [
+        {
+          issue: 40,
+          category: "reviewer-refused",
+          reason: "AC3 unverified",
+          logPath: ".afk-loop/logs/issue-40/reviewer-iter-1.jsonl",
+        },
+      ],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status);
+    expect(frame).toContain("ERRORS");
+    expect(frame).toContain("⚠");
+    expect(frame).toContain("#40");
+    expect(frame).toContain("AC3 unverified");
+    expect(frame).toContain(".afk-loop/logs/issue-40/reviewer-iter-1.jsonl");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,
