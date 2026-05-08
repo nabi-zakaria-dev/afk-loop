@@ -7,7 +7,7 @@ import { mkTmpRepo } from "./helpers/tmp-repo.ts";
 import { runOrchestrator } from "../src/orchestrator.ts";
 import type { Issue } from "../src/issues.ts";
 import type { Config } from "../src/config.ts";
-import type { StatusJson, InFlightItem } from "../src/observability.ts";
+import type { StatusJson, InFlightItem, QueuedItem, DoneItem, FailedItem } from "../src/observability.ts";
 
 const MOCK_CLAUDE = fileURLToPath(new URL("./helpers/mock-claude.sh", import.meta.url));
 
@@ -225,6 +225,38 @@ describe("orchestrator status.json inFlight", () => {
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({ issue: 42, phase: "reviewer" });
       expect(items[0]!.lastTransitionAt >= items[0]!.startedAt).toBe(true);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("writes queued[] with issues beyond the current frontier at implementer-start", async () => {
+    const repo = mkTmpRepo();
+    try {
+      let captured: QueuedItem[] | undefined;
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(42), mkIssue(43)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+        progress: (event) => {
+          if (event === "implementerStarted" && captured === undefined) {
+            const path = join(repo.dir, ".afk-loop", "status.json");
+            if (existsSync(path)) {
+              const status = JSON.parse(readFileSync(path, "utf8")) as StatusJson;
+              captured = status.queued;
+            }
+          }
+        },
+      });
+      expect(captured).toBeDefined();
+      expect(captured!).toHaveLength(1);
+      expect(captured![0]).toMatchObject({ issue: 43, title: "Issue 43" });
     } finally {
       repo.cleanup();
     }
