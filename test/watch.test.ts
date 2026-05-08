@@ -3,7 +3,14 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderFrame, runWatch, watchLoop } from "../src/watch.ts";
-import { writeStatus, type StatusJson, type InFlightItem } from "../src/observability.ts";
+import {
+  writeStatus,
+  type StatusJson,
+  type InFlightItem,
+  type QueuedItem,
+  type DoneItem,
+  type FailedItem,
+} from "../src/observability.ts";
 
 const mkDir = (): string => mkdtempSync(join(tmpdir(), "afk-watch-"));
 
@@ -218,6 +225,41 @@ describe("writeStatus inFlight shape", () => {
         startedAt: "2026-05-08T14:30:11Z",
         lastTransitionAt: "2026-05-08T14:30:11Z",
       });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("roundtrips queued, done, and failed arrays", () => {
+    const dir = mkDir();
+    try {
+      const queued: QueuedItem[] = [{ issue: 50, title: "Send invoice reminder" }];
+      const done: DoneItem[] = [
+        { issue: 41, outcome: "merged", commitUrl: "https://example.com/c/abc" },
+      ];
+      const failed: FailedItem[] = [
+        {
+          issue: 40,
+          category: "reviewer-refused",
+          reason: "AC3 unverified",
+          logPath: ".afk-loop/logs/issue-40/reviewer-iter-1.jsonl",
+        },
+      ];
+      const status: StatusJson = {
+        currentIteration: 1,
+        frontier: [],
+        inFlight: [],
+        queued,
+        done,
+        failed,
+        lastEventAt: "2026-05-08T14:30:00Z",
+        runState: "running",
+      };
+      writeStatus(dir, status);
+      const parsed = JSON.parse(readFileSync(join(dir, ".afk-loop", "status.json"), "utf8")) as StatusJson;
+      expect(parsed.queued).toEqual(queued);
+      expect(parsed.done).toEqual(done);
+      expect(parsed.failed).toEqual(failed);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

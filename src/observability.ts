@@ -10,10 +10,37 @@ export interface InFlightItem {
   lastTransitionAt: string;
 }
 
+export interface QueuedItem {
+  issue: number;
+  title: string;
+}
+
+export interface DoneItem {
+  issue: number;
+  outcome: "merged";
+  commitUrl?: string;
+}
+
+export type FailedCategory =
+  | "implementer-incomplete"
+  | "implementer-error"
+  | "reviewer-refused"
+  | "merge-conflict";
+
+export interface FailedItem {
+  issue: number;
+  category: FailedCategory;
+  reason: string;
+  logPath: string;
+}
+
 export interface StatusJson {
   currentIteration: number;
   frontier: number[];
   inFlight: InFlightItem[];
+  queued?: QueuedItem[];
+  done?: DoneItem[];
+  failed?: FailedItem[];
   lastEventAt: string;
   runState: "running" | "paused" | "done" | "failed";
 }
