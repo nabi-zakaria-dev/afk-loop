@@ -55,18 +55,45 @@ export interface RunOpts {
   now?: () => number;
   /** Notification callback (defaults to osascript on macOS, no-op elsewhere). */
   notify?: (event: NotifyEvent, message: string) => void;
+  /** Streaming progress callback (defaults to timestamped lines on stderr). */
+  progress?: (event: ProgressEvent, message: string) => void;
   /** Override for repo slug derivation (default: gh repo view nameWithOwner). */
   repoSlug?: string;
   /** Disable filesystem observability (summary.md / status.json). For tests. */
   disableObservability?: boolean;
 }
 
+export type ProgressEvent =
+  | "runStarted"
+  | "iterationStarted"
+  | "frontierPicked"
+  | "advisoryRunning"
+  | "advisoryDone"
+  | "worktreeReady"
+  | "implementerStarted"
+  | "implementerComplete"
+  | "reviewerStarted"
+  | "reviewerComplete"
+  | "mergerStarted"
+  | "mergerComplete"
+  | "iterationCompleted"
+  | "rateLimitPaused"
+  | "runFinished"
+  | "warning";
+
 export interface RunResult {
   exit: ExitReason;
   iterations: IterationOutcome[];
 }
 
+const defaultProgress = (event: ProgressEvent, message: string): void => {
+  const ts = new Date().toISOString().slice(11, 19); // HH:MM:SS
+  process.stderr.write(`[afk-loop ${ts}] ${event.padEnd(20)} ${message}\n`);
+};
+
 export async function runIteration(opts: RunOpts, iteration: number): Promise<IterationOutcome> {
+  const progress = opts.progress ?? defaultProgress;
+  progress("iterationStarted", `iter ${iteration}: fetching open AFK issues`);
   const cap = Math.min(opts.maxParallel ?? opts.config.maxParallel, opts.config.maxParallel);
   const fetcher = opts.fetchIssues ?? (() => fetchAfkIssues({
     label: opts.config.label,
@@ -88,6 +115,12 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
     };
   }
   const frontier = computeFrontier(issues, { maxParallel: cap, failedThisRun: opts.failedThisRun ?? [] });
+  progress(
+    "frontierPicked",
+    frontier.length === 0
+      ? `iter ${iteration}: frontier empty (${issues.length} open, ${opts.failedThisRun?.length ?? 0} skipped)`
+      : `iter ${iteration}: frontier = [${frontier.map((i) => `#${i.number}`).join(", ")}]`,
+  );
   if (frontier.length === 0) {
     return {
       iteration,
@@ -104,6 +137,7 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
 
   let advisoryConcerns: string | undefined;
   if (opts.config.advisoryPlanner && frontier.length > 0) {
+    progress("advisoryRunning", `iter ${iteration}: advisory planner running (max 3 turns)`);
     const advCall: Parameters<typeof runAdvisoryPlanner>[0] = {
       targetDir: opts.cwd,
       iteration,
@@ -112,6 +146,7 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
     if (opts.claudeBin !== undefined) advCall.claudeBin = opts.claudeBin;
     const adv = await runAdvisoryPlanner(advCall);
     advisoryConcerns = adv.concerns;
+    progress("advisoryDone", `iter ${iteration}: advisory ${adv.outcome} — ${adv.concerns.slice(0, 80)}`);
   }
 
   // Pre-create worktrees serially — git's index lock makes concurrent
@@ -119,8 +154,10 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
   // in parallel against pre-existing worktrees safely.
   for (const issue of frontier) {
     createWorktree(opts.cwd, issue.number, opts.config.mainBranch);
+    progress("worktreeReady", `iter ${iteration}: worktree ready for #${issue.number}`);
   }
 
+  progress("implementerStarted", `iter ${iteration}: spawning ${frontier.length} implementer(s) in parallel`);
   const implResults = await Promise.allSettled(
     frontier.map(async (issue) => {
       const env = opts.envForIssue?.(issue);
@@ -134,6 +171,10 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
       if (opts.claudeBin !== undefined) implCall.claudeBin = opts.claudeBin;
       if (env !== undefined) implCall.env = env;
       const result = await runImplementer(implCall);
+      progress(
+        "implementerComplete",
+        `iter ${iteration}: #${issue.number} implementer outcome=${result.outcome} commits=${result.commits.length}`,
+      );
       return { issue, result };
     }),
   );
@@ -165,6 +206,7 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
   }
 
   if (toReview.length > 0) {
+    progress("reviewerStarted", `iter ${iteration}: reviewing ${toReview.length} branch(es) with commits`);
     const revResults = await Promise.allSettled(
       toReview.map(async (issue) => {
         const env = opts.envForIssue?.(issue);
@@ -177,6 +219,10 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
         if (opts.claudeBin !== undefined) revCall.claudeBin = opts.claudeBin;
         if (env !== undefined) revCall.env = env;
         const result = await runReviewer(revCall);
+        progress(
+          "reviewerComplete",
+          `iter ${iteration}: #${issue.number} reviewer verdict=${result.outcome === "complete" ? "approved" : "refused"}`,
+        );
         return { issue, result };
       }),
     );
@@ -201,6 +247,7 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
 
   let merge: MergeResult | undefined;
   if (approved.length > 0) {
+    progress("mergerStarted", `iter ${iteration}: merging ${approved.length} branch(es) into ${opts.config.mainBranch}`);
     const mergeOpts: Parameters<typeof mergeBranches>[0] = {
       cwd: opts.cwd,
       mainBranch: opts.config.mainBranch,
@@ -209,7 +256,16 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
     };
     if (opts.ghRun !== undefined) mergeOpts.ghRun = opts.ghRun;
     merge = mergeBranches(mergeOpts);
+    progress(
+      "mergerComplete",
+      `iter ${iteration}: merged=[${merge.merged.join(", ")}] failed=[${merge.failed.map((f) => f.issue).join(", ")}]`,
+    );
   }
+
+  progress(
+    "iterationCompleted",
+    `iter ${iteration}: ${implemented.length} implemented, ${approved.length} approved, ${merge?.merged.length ?? 0} merged, ${failedImpl.length + failedRev.length} failed`,
+  );
 
   const out: IterationOutcome = {
     iteration,
@@ -230,6 +286,7 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
   const sleep = opts.sleep ?? defaultSleep;
   const now = opts.now ?? Date.now;
   const notify = opts.notify ?? ((event: NotifyEvent, msg: string) => defaultNotify(event, msg));
+  const progress = opts.progress ?? defaultProgress;
   const budgetMs = opts.config.runtimeBudgetHours * 60 * 60 * 1000;
   const startedAt = now();
   const obs = !opts.disableObservability;
@@ -243,6 +300,7 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
   await waitOutRateLimit(state, sleep, now, notify);
 
   // Initial run-started notification + status.
+  progress("runStarted", `afk-loop run started — runtimeBudget=${opts.config.runtimeBudgetHours}h maxParallel=${opts.maxParallel ?? opts.config.maxParallel}`);
   notify("runStarted", "AFK loop started");
   if (obs) writeStatus(opts.cwd, { currentIteration: 0, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "running" });
 
@@ -290,14 +348,17 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
 
     if (outcome.cycleDetected && outcome.cycleDetected.length > 0) {
       if (obs) appendSummarySection(opts.cwd, `\n## Run aborted: CYCLE\nCycle in dep-graph: ${JSON.stringify(outcome.cycleDetected)}\n`);
+      progress("runFinished", `run aborted: CYCLE detected in dep-graph`);
       notify("runFinished", `AFK loop aborted: cycle detected in dep-graph`);
       if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "failed" });
       return { exit: "CYCLE", iterations };
     }
 
     if (outcome.rateLimited) {
+      progress("rateLimitPaused", `rate-limited — pausing until ${state.rateLimitedUntil ?? "unknown"}`);
       if (opts.once) {
         if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "paused" });
+        progress("runFinished", "run exited: RATE_LIMITED (--once)");
         return { exit: "RATE_LIMITED", iterations };
       }
       await waitOutRateLimit(state, sleep, now, notify);
@@ -314,16 +375,19 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
     if (outcome.frontier.length === 0) {
       if (obs) appendSummarySection(opts.cwd, `\n## Run complete: DONE\n`);
       if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "done" });
+      progress("runFinished", `run complete: DONE after ${i} iteration(s)`);
       notify("runFinished", "AFK loop finished");
       return { exit: "DONE", iterations };
     }
     if (opts.once) {
       if (obs) writeStatus(opts.cwd, { currentIteration: i, frontier: [], inFlight: [], lastEventAt: new Date().toISOString(), runState: "done" });
+      progress("runFinished", "run complete: DONE (--once)");
       notify("runFinished", "AFK loop finished (once)");
       return { exit: "DONE", iterations };
     }
     if (now() - startedAt >= budgetMs) {
       if (obs) appendSummarySection(opts.cwd, `\n## Run complete: TIME_BUDGET\n`);
+      progress("runFinished", "run complete: TIME_BUDGET (wall-clock budget exceeded)");
       notify("runFinished", "AFK loop exited: TIME_BUDGET");
       return { exit: "TIME_BUDGET", iterations };
     }

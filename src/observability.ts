@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, appendFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, appendFileSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -19,7 +19,11 @@ const statusPath = (target: string): string => join(obsDir(target), "status.json
 export function appendSummarySection(target: string, section: string): void {
   mkdirSync(obsDir(target), { recursive: true });
   const path = summaryPath(target);
-  if (!existsSync(path)) {
+  // Header is written if the file is missing OR empty (afk-loop init creates an
+  // empty stub, so existsSync alone misses the case where the file exists but
+  // has no header yet).
+  const needsHeader = !existsSync(path) || readFileSync(path, "utf8").trim().length === 0;
+  if (needsHeader) {
     const header = `# AFK Loop Run — ${new Date().toISOString()}\n\n`;
     writeFileSync(path, header);
   }
