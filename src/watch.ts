@@ -54,6 +54,18 @@ export function watchLoop(deps: WatchLoopDeps): Promise<void> {
         unsubKey();
         deps.write(ALT_SCREEN_EXIT);
         resolve();
+      } else if (key === "l") {
+        clearTick();
+        unsubKey();
+        deps.write(ALT_SCREEN_EXIT);
+        const status = deps.readStatus();
+        if (status?.failed && status.failed.length > 0) {
+          deps.write(`\nERRORS (${status.failed.length}):\n`);
+          for (const f of status.failed) {
+            deps.write(`  ⚠ #${f.issue} ${f.category}: ${f.reason} · ${f.logPath}\n`);
+          }
+        }
+        resolve();
       }
     });
   });
