@@ -2,6 +2,14 @@ import { existsSync, mkdirSync, appendFileSync, writeFileSync, readFileSync } fr
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
+export interface InFlightItem {
+  issue: number;
+  title: string;
+  phase: "implementer" | "reviewer" | "merger";
+  startedAt: string;
+  lastTransitionAt: string;
+}
+
 export interface StatusJson {
   currentIteration: number;
   frontier: number[];
