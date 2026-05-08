@@ -78,6 +78,14 @@ export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
     for (const q of status.queued) sections.push(`  #${q.issue} ${q.title}`);
   }
 
+  if (status.done && status.done.length > 0) {
+    sections.push("RECENT");
+    for (const d of status.done) {
+      const url = d.commitUrl ? ` · ${d.commitUrl}` : "";
+      sections.push(`  ✅ #${d.issue} ${d.outcome}${url}`);
+    }
+  }
+
   return sections.join("\n");
 }
 
