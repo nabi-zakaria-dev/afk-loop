@@ -3,13 +3,29 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { runClaudePhase } from "../src/claude-runner.ts";
+import { runClaudePhase, buildClaudeArgs } from "../src/claude-runner.ts";
 import { mkTmpRepo } from "./helpers/tmp-repo.ts";
 
 const headSha = (cwd: string): string =>
   execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
 
 const MOCK_CLAUDE = fileURLToPath(new URL("./helpers/mock-claude.sh", import.meta.url));
+
+describe("buildClaudeArgs", () => {
+  it("includes --verbose when output-format is stream-json (required by Claude Code)", () => {
+    const args = buildClaudeArgs({
+      maxTurns: 50,
+      prompt: "do work",
+      userMessage: "issue 42",
+      permissionMode: "bypassPermissions",
+    });
+    expect(args).toContain("--verbose");
+    expect(args).toContain("--output-format");
+    expect(args).toContain("stream-json");
+    // The order matters less than the presence — but --print + stream-json without
+    // --verbose is the bug the failing run exposed; this test gates against regression.
+  });
+});
 
 describe("runClaudePhase", () => {
   it("captures success outcome with commits", async () => {
