@@ -385,6 +385,31 @@ export async function runOrchestrator(opts: RunOpts): Promise<RunResult> {
         if (commitUrls[n]) item.commitUrl = commitUrls[n];
         runDone.push(item);
       }
+      const logDir = (n: number): string => `.afk-loop/logs/issue-${n}`;
+      for (const n of outcome.failedImplementer) {
+        runFailed.push({
+          issue: n,
+          category: "implementer-incomplete",
+          reason: "implementer did not complete (max turns or stuck)",
+          logPath: logDir(n),
+        });
+      }
+      for (const n of outcome.failedReviewer) {
+        runFailed.push({
+          issue: n,
+          category: "reviewer-refused",
+          reason: "reviewer refused (acceptance criteria unmet or tests failed)",
+          logPath: logDir(n),
+        });
+      }
+      for (const f of failedMerge) {
+        runFailed.push({
+          issue: f.issue,
+          category: "merge-conflict",
+          reason: f.reason,
+          logPath: logDir(f.issue),
+        });
+      }
       const section = formatIterationSection({
         iteration: outcome.iteration,
         merged,
