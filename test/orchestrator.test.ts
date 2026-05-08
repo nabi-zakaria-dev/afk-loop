@@ -355,4 +355,26 @@ describe("orchestrator status.json inFlight", () => {
       repo.cleanup();
     }
   });
+
+  it("includes runtimeBudgetHours in status.json after a run", async () => {
+    const repo = mkTmpRepo();
+    try {
+      const gh = fakeGh();
+      await runOrchestrator({
+        cwd: repo.dir,
+        config: cfg({ maxParallel: 1, runtimeBudgetHours: 4 }),
+        maxParallel: 1,
+        once: true,
+        fetchIssues: () => [mkIssue(42)],
+        ghRun: gh.runner,
+        claudeBin: MOCK_CLAUDE,
+        envForIssue: () => ({ MOCK_CLAUDE_SCENARIO: "success", MOCK_CLAUDE_COMMITS: "1" }),
+      });
+      const path = join(repo.dir, ".afk-loop", "status.json");
+      const status = JSON.parse(readFileSync(path, "utf8")) as StatusJson;
+      expect(status.runtimeBudgetHours).toBe(4);
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
