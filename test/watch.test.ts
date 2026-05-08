@@ -36,6 +36,33 @@ describe("renderFrame", () => {
     expect(frame).toContain("running");
   });
 
+  it("renders AC progress count and current AC state in the one-liner when acs are set", () => {
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [
+        {
+          issue: 42,
+          title: "Display pending invoices",
+          phase: "implementer",
+          startedAt: "2026-05-08T14:30:00Z",
+          lastTransitionAt: "2026-05-08T14:30:00Z",
+          acs: [
+            { n: 1, title: "first", state: "green" },
+            { n: 2, title: "second", state: "red" },
+            { n: 3, title: "third", state: "pending" },
+          ],
+        },
+      ],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status, { now: new Date("2026-05-08T14:30:00Z") });
+    expect(frame).toContain("1/3");
+    expect(frame).toMatch(/AC\s*2/);
+    expect(frame).toContain("RED");
+  });
+
   it("renders one line per inFlight item with issue, phase, title, and elapsed", () => {
     const status: StatusJson = {
       currentIteration: 2,
