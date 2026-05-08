@@ -157,6 +157,22 @@ export async function runIteration(opts: RunOpts, iteration: number): Promise<It
     progress("worktreeReady", `iter ${iteration}: worktree ready for #${issue.number}`);
   }
 
+  if (!opts.disableObservability) {
+    const startedAt = new Date().toISOString();
+    writeStatus(opts.cwd, {
+      currentIteration: iteration,
+      frontier: frontier.map((i) => i.number),
+      inFlight: frontier.map((issue) => ({
+        issue: issue.number,
+        title: issue.title,
+        phase: "implementer" as const,
+        startedAt,
+        lastTransitionAt: startedAt,
+      })),
+      lastEventAt: startedAt,
+      runState: "running",
+    });
+  }
   progress("implementerStarted", `iter ${iteration}: spawning ${frontier.length} implementer(s) in parallel`);
   const implResults = await Promise.allSettled(
     frontier.map(async (issue) => {
