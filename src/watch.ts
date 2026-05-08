@@ -86,6 +86,13 @@ export function renderFrame(status: StatusJson, opts?: RenderOpts): string {
     }
   }
 
+  if (status.failed && status.failed.length > 0) {
+    sections.push(`ERRORS (${status.failed.length})`);
+    for (const f of status.failed) {
+      sections.push(`  ⚠ #${f.issue} ${f.category}: ${f.reason} · ${f.logPath}`);
+    }
+  }
+
   return sections.join("\n");
 }
 
