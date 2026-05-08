@@ -120,6 +120,33 @@ describe("watchLoop", () => {
     await promise;
     expect(resolved).toBe(true);
   });
+
+  it("wraps output in alt-screen enter (start) and exit (end) escape sequences", async () => {
+    const writes: string[] = [];
+    let keyHandler: ((k: string) => void) | null = null;
+
+    const promise = watchLoop({
+      readStatus: () => baseStatus(7),
+      write: (s) => writes.push(s),
+      onKey: (h) => {
+        keyHandler = h;
+        return () => {};
+      },
+      setInterval: () => () => {},
+    });
+
+    // \x1b[?1049h is the standard alt-screen enter sequence
+    expect(writes.join("")).toContain("\x1b[?1049h");
+
+    keyHandler!("q");
+    await promise;
+
+    // \x1b[?1049l is the standard alt-screen exit sequence
+    expect(writes.join("")).toContain("\x1b[?1049l");
+    // Exit must come after enter
+    const all = writes.join("");
+    expect(all.indexOf("\x1b[?1049l")).toBeGreaterThan(all.indexOf("\x1b[?1049h"));
+  });
 });
 
 describe("writeStatus inFlight shape", () => {
