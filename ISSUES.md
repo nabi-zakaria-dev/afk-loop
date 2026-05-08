@@ -4,6 +4,8 @@
 
 All slices below are **AFK** unless marked otherwise. None are HITL except where explicitly flagged.
 
+Acceptance-criteria status uses `[todo]` / `[done]` text labels. Every line has one or the other inside the brackets — never empty `[ ]`.
+
 ---
 
 ## #1 — Project skeleton + config + dep-graph + cycle detection
@@ -22,19 +24,19 @@ This is the foundation tracer bullet — every later slice rides on top of `conf
 
 ### Acceptance criteria
 
-- [ ] `afk-loop/package.json` declares `tsx` as dep, has a `plan` script binding.
-- [ ] `afk-loop/main.mts` exists with a `plan` subcommand.
-- [ ] Loads `<target>/.afk-loop/config.json` and validates: `label`, `hitlPattern`, `mainBranch`, `maxParallel`, `maxTurnsPerImplementer`, `advisoryPlanner`, `runtimeBudgetHours`.
-- [ ] Missing or malformed config → friendly error message + non-zero exit.
-- [ ] Calls `gh issue list --label <label> --state open --json number,title,body,labels` and parses results into typed `Issue` objects.
-- [ ] Filters out issues whose title matches `hitlPattern`.
-- [ ] Parses "Blocked by: #N" entries from each issue's body (case-insensitive, supports comma-separated lists).
-- [ ] Builds DAG. Detects cycles via DFS — including self-loops (issue blocking itself).
-- [ ] If any cycle exists, exits non-zero with a clear message naming the cycle members.
-- [ ] If no cycles, prints unblocked frontier as JSON: `{"frontier":[{"number":42,"title":"...","branch":"afk/issue-42"}, ...]}` capped at `maxParallel`.
-- [ ] Unit tests for `depgraph` with fixtures: linear chain, diamond, cycle, self-loop, empty input. Tests pass via `npm test`.
-- [ ] Unit tests for `issues` parser with mocked `gh` JSON fixtures.
-- [ ] `afk-loop/README.md` has a one-paragraph quickstart for this slice.
+- [done] `afk-loop/package.json` declares `tsx` as dep, has a `plan` script binding.
+- [done] `afk-loop/main.mts` exists with a `plan` subcommand.
+- [done] Loads `<target>/.afk-loop/config.json` and validates: `label`, `hitlPattern`, `mainBranch`, `maxParallel`, `maxTurnsPerImplementer`, `advisoryPlanner`, `runtimeBudgetHours`.
+- [done] Missing or malformed config → friendly error message + non-zero exit.
+- [done] Calls `gh issue list --label <label> --state open --json number,title,body,labels` and parses results into typed `Issue` objects.
+- [done] Filters out issues whose title matches `hitlPattern`.
+- [done] Parses "Blocked by: #N" entries from each issue's body (case-insensitive, supports comma-separated lists).
+- [done] Builds DAG. Detects cycles via DFS — including self-loops (issue blocking itself).
+- [done] If any cycle exists, exits non-zero with a clear message naming the cycle members.
+- [done] If no cycles, prints unblocked frontier as JSON: `{"frontier":[{"number":42,"title":"...","branch":"afk/issue-42"}, ...]}` capped at `maxParallel`.
+- [done] Unit tests for `depgraph` with fixtures: linear chain, diamond, cycle, self-loop, empty input. Tests pass via `npm test`.
+- [done] Unit tests for `issues` parser with mocked `gh` JSON fixtures.
+- [done] `afk-loop/README.md` has a one-paragraph quickstart for this slice.
 
 ---
 
@@ -52,16 +54,16 @@ User runs `npx tsx afk-loop/main.mts create-worktree 42` and gets a fully isolat
 
 ### Acceptance criteria
 
-- [ ] `afk-loop create-worktree <issue-number>` subcommand exists.
-- [ ] Creates worktree at `<target>/.afk-loop/worktrees/issue-<N>/` on branch `afk/issue-<N>` (created from `mainBranch`).
-- [ ] If branch `afk/issue-<N>` already exists, reuse it (don't fail).
-- [ ] Copies `node_modules` from host repo into worktree (use `cp -al` or rsync; whichever is faster on macOS).
-- [ ] Copies `.env` from host repo if present; logs a warning and continues if absent.
-- [ ] Writes `<worktree>/.claude/settings.local.json` containing the full nuclear-pattern `permissions.deny` array from the design.
-- [ ] Strips push capability: `git -C <worktree> remote set-url --push origin no-push://disabled` (or removes origin entirely).
-- [ ] `afk-loop destroy-worktree <issue-number>` subcommand removes the worktree and deletes the branch (used only on success).
-- [ ] Integration test against a fresh `git init`'d throwaway repo: creates worktree, asserts deny-list file exists with expected contents, asserts `git push origin` from inside the worktree fails (no-push URL), tears down cleanly.
-- [ ] Adds `.afk-loop/` to target repo's `.gitignore` if missing (idempotent).
+- [done] `afk-loop create-worktree <issue-number>` subcommand exists.
+- [done] Creates worktree at `<target>/.afk-loop/worktrees/issue-<N>/` on branch `afk/issue-<N>` (created from `mainBranch`).
+- [done] If branch `afk/issue-<N>` already exists, reuse it (don't fail).
+- [done] Copies `node_modules` from host repo into worktree (use `cp -al` or rsync; whichever is faster on macOS).
+- [done] Copies `.env` from host repo if present; logs a warning and continues if absent.
+- [done] Writes `<worktree>/.claude/settings.local.json` containing the full nuclear-pattern `permissions.deny` array from the design.
+- [done] Strips push capability: `git -C <worktree> remote set-url --push origin no-push://disabled` (or removes origin entirely).
+- [done] `afk-loop destroy-worktree <issue-number>` subcommand removes the worktree and deletes the branch (used only on success).
+- [done] Integration test against a fresh `git init`'d throwaway repo: creates worktree, asserts deny-list file exists with expected contents, asserts `git push origin` from inside the worktree fails (no-push URL), tears down cleanly.
+- [done] Adds `.afk-loop/` to target repo's `.gitignore` if missing (idempotent).
 
 ---
 
@@ -79,17 +81,17 @@ User runs `npx tsx afk-loop/main.mts implement 42` and the loop creates a worktr
 
 ### Acceptance criteria
 
-- [ ] `afk-loop implement <issue-number>` subcommand.
-- [ ] Spawns `claude -p --max-turns <maxTurnsPerImplementer> --output-format stream-json --permission-mode bypassPermissions` with cwd pinned to the worktree path.
-- [ ] Substitutes `{{ISSUE_NUMBER}}`, `{{ISSUE_TITLE}}`, `{{BRANCH}}`, `{{MAX_TURNS}}` into `afk-loop/prompts/implement-prompt.md` and passes via `--append-system-prompt`.
-- [ ] Streams stdout JSONL into `<target>/.afk-loop/logs/issue-<N>/implementer-iter-1.jsonl`.
-- [ ] On exit: enumerates commits made during the run via `git log <main>..afk/issue-<N>`.
-- [ ] Parses output for `<promise>COMPLETE</promise>` (case-sensitive) → outcome `complete`. Otherwise → outcome `incomplete`.
-- [ ] Detects rate-limit error in stderr or exit code → outcome `rate-limited` with `rateLimitedUntil` parsed from message (or `now + 60min` fallback).
-- [ ] Prints final outcome JSON: `{"outcome":"complete","commits":["abc...","def..."],"turns":12}`.
-- [ ] `implement-prompt.md` exists at `afk-loop/prompts/implement-prompt.md` with TDD instructions, scope-lock, comment-and-exit-if-stuck semantics.
-- [ ] Mock-`claude`-binary integration test: shell script emits canned JSONL with two commits and a `<promise>COMPLETE</promise>`. Test asserts outcome correctly parsed and JSONL log written.
-- [ ] Mock-`claude`-binary rate-limit test: shell script emits a rate-limit-shaped error. Test asserts outcome and reset time correctly parsed.
+- [done] `afk-loop implement <issue-number>` subcommand.
+- [done] Spawns `claude -p --max-turns <maxTurnsPerImplementer> --output-format stream-json --permission-mode bypassPermissions` with cwd pinned to the worktree path.
+- [done] Substitutes `{{ISSUE_NUMBER}}`, `{{ISSUE_TITLE}}`, `{{BRANCH}}`, `{{MAX_TURNS}}` into `afk-loop/prompts/implement-prompt.md` and passes via `--append-system-prompt`.
+- [done] Streams stdout JSONL into `<target>/.afk-loop/logs/issue-<N>/implementer-iter-1.jsonl`.
+- [done] On exit: enumerates commits made during the run via `git log <main>..afk/issue-<N>`.
+- [done] Parses output for `<promise>COMPLETE</promise>` (case-sensitive) → outcome `complete`. Otherwise → outcome `incomplete`.
+- [done] Detects rate-limit error in stderr or exit code → outcome `rate-limited` with `rateLimitedUntil` parsed from message (or `now + 60min` fallback).
+- [done] Prints final outcome JSON: `{"outcome":"complete","commits":["abc...","def..."],"turns":12}`.
+- [done] `implement-prompt.md` exists at `afk-loop/prompts/implement-prompt.md` with TDD instructions, scope-lock, comment-and-exit-if-stuck semantics.
+- [done] Mock-`claude`-binary integration test: shell script emits canned JSONL with two commits and a `<promise>COMPLETE</promise>`. Test asserts outcome correctly parsed and JSONL log written.
+- [done] Mock-`claude`-binary rate-limit test: shell script emits a rate-limit-shaped error. Test asserts outcome and reset time correctly parsed.
 
 ---
 
@@ -107,15 +109,15 @@ User runs `npx tsx afk-loop/main.mts review 42` (after implementer has produced 
 
 ### Acceptance criteria
 
-- [ ] `afk-loop review <issue-number>` subcommand.
-- [ ] Spawns `claude -p --max-turns 1 --output-format stream-json --permission-mode bypassPermissions` with cwd pinned to the same worktree the implementer used.
-- [ ] Substitutes `{{ISSUE_NUMBER}}`, `{{BRANCH}}`, `{{SOURCE_BRANCH}}`, `{{TOUCHED_FILES}}` (from `git diff --name-only main..branch`), and `{{CODING_STANDARDS_PATH}}` (path to `<target>/.afk-loop/CODING_STANDARDS.md` if present, else empty) into `afk-loop/prompts/review-prompt.md`.
-- [ ] JSONL captured to `<target>/.afk-loop/logs/issue-<N>/reviewer-iter-1.jsonl`.
-- [ ] On exit: parses for `<promise>COMPLETE</promise>` → verdict `approved`. Otherwise → verdict `refused`.
-- [ ] If reviewer made commits (style fixes, test fixes), they're included in the `commits` field of the outcome.
-- [ ] Prints verdict JSON: `{"verdict":"approved","commits":[...]}`.
-- [ ] `review-prompt.md` exists at `afk-loop/prompts/review-prompt.md` with: read issue body, verify each acceptance criterion against diff, run typecheck + tests, refactor only inside touched files, refuse via missing `<promise>` if any criterion fails.
-- [ ] Mock-`claude` integration test for both `approved` and `refused` outcomes.
+- [done] `afk-loop review <issue-number>` subcommand.
+- [done] Spawns `claude -p --max-turns 1 --output-format stream-json --permission-mode bypassPermissions` with cwd pinned to the same worktree the implementer used.
+- [done] Substitutes `{{ISSUE_NUMBER}}`, `{{BRANCH}}`, `{{SOURCE_BRANCH}}`, `{{TOUCHED_FILES}}` (from `git diff --name-only main..branch`), and `{{CODING_STANDARDS_PATH}}` (path to `<target>/.afk-loop/CODING_STANDARDS.md` if present, else empty) into `afk-loop/prompts/review-prompt.md`.
+- [done] JSONL captured to `<target>/.afk-loop/logs/issue-<N>/reviewer-iter-1.jsonl`.
+- [done] On exit: parses for `<promise>COMPLETE</promise>` → verdict `approved`. Otherwise → verdict `refused`.
+- [done] If reviewer made commits (style fixes, test fixes), they're included in the `commits` field of the outcome.
+- [done] Prints verdict JSON: `{"verdict":"approved","commits":[...]}`.
+- [done] `review-prompt.md` exists at `afk-loop/prompts/review-prompt.md` with: read issue body, verify each acceptance criterion against diff, run typecheck + tests, refactor only inside touched files, refuse via missing `<promise>` if any criterion fails.
+- [done] Mock-`claude` integration test for both `approved` and `refused` outcomes.
 
 ---
 
@@ -133,15 +135,15 @@ User runs `npx tsx afk-loop/main.mts merge --branches afk/issue-42,afk/issue-44`
 
 ### Acceptance criteria
 
-- [ ] `afk-loop merge --branches <comma-list>` subcommand (with optional `--issues <comma-list>` for the matching issue numbers; if omitted, derive from branch names).
-- [ ] Spawns `claude -p --max-turns 5 --output-format stream-json --permission-mode bypassPermissions` with cwd pinned to the target repo's main checkout (NOT a worktree).
-- [ ] Substitutes `{{BRANCHES}}`, `{{ISSUES}}`, `{{MAIN_BRANCH}}` into `afk-loop/prompts/merge-prompt.md`.
-- [ ] On per-branch merge conflict or post-merge test failure: orchestrator (or the merger prompt itself) reverts that one merge (`git merge --abort` or `git reset --hard ORIG_HEAD`), comments on the issue, continues to the next branch.
-- [ ] On per-branch success: `gh issue close <N> --comment "Merged by afk-loop"`.
-- [ ] JSONL captured to `<target>/.afk-loop/logs/merger-iter-K.jsonl`.
-- [ ] Prints final summary JSON: `{"merged":[42],"failed":[{"issue":44,"reason":"conflict in src/auth.ts"}]}`.
-- [ ] `merge-prompt.md` exists at `afk-loop/prompts/merge-prompt.md` with the per-branch revert-and-continue semantics from the design.
-- [ ] Integration test against a throwaway repo with two prepared branches (one cleanly mergeable, one conflicting); asserts the clean one merges + closes its issue, the conflicting one reverts + comments.
+- [done] `afk-loop merge --branches <comma-list>` subcommand (with optional `--issues <comma-list>` for the matching issue numbers; if omitted, derive from branch names).
+- [done] Spawns `claude -p --max-turns 5 --output-format stream-json --permission-mode bypassPermissions` with cwd pinned to the target repo's main checkout (NOT a worktree).
+- [done] Substitutes `{{BRANCHES}}`, `{{ISSUES}}`, `{{MAIN_BRANCH}}` into `afk-loop/prompts/merge-prompt.md`.
+- [done] On per-branch merge conflict or post-merge test failure: orchestrator (or the merger prompt itself) reverts that one merge (`git merge --abort` or `git reset --hard ORIG_HEAD`), comments on the issue, continues to the next branch.
+- [done] On per-branch success: `gh issue close <N> --comment "Merged by afk-loop"`.
+- [done] JSONL captured to `<target>/.afk-loop/logs/merger-iter-K.jsonl`.
+- [done] Prints final summary JSON: `{"merged":[42],"failed":[{"issue":44,"reason":"conflict in src/auth.ts"}]}`.
+- [done] `merge-prompt.md` exists at `afk-loop/prompts/merge-prompt.md` with the per-branch revert-and-continue semantics from the design.
+- [done] Integration test against a throwaway repo with two prepared branches (one cleanly mergeable, one conflicting); asserts the clean one merges + closes its issue, the conflicting one reverts + comments.
 
 ---
 
@@ -164,14 +166,14 @@ User runs `npx tsx afk-loop/main.mts run --once --max-parallel=1` and the loop:
 
 ### Acceptance criteria
 
-- [ ] `afk-loop run` subcommand with flags `--once`, `--max-parallel <N>`.
-- [ ] When `--max-parallel=1` and `--once`, executes exactly one issue end-to-end and exits.
-- [ ] Frontier capped to `min(maxParallel, configMaxParallel)`.
-- [ ] If implementer outcome is `incomplete` → reviewer is skipped, merger is skipped, issue logged but not added to any state file yet (state comes in #8).
-- [ ] If reviewer verdict is `refused` → merger skipped.
-- [ ] On full success path: issue closed, branch merged into main.
-- [ ] Integration test (mock `claude`, mock `gh`, real `git` in throwaway repo): one fully-unblocked issue → full pipeline → main has the commit → issue closed via mocked `gh`.
-- [ ] Integration test for incomplete-implementer path: implementer doesn't emit `<promise>` → reviewer not called → merger not called → exit code reflects partial outcome.
+- [done] `afk-loop run` subcommand with flags `--once`, `--max-parallel <N>`.
+- [done] When `--max-parallel=1` and `--once`, executes exactly one issue end-to-end and exits.
+- [done] Frontier capped to `min(maxParallel, configMaxParallel)`.
+- [done] If implementer outcome is `incomplete` → reviewer is skipped, merger is skipped, issue logged but not added to any state file yet (state comes in #8).
+- [done] If reviewer verdict is `refused` → merger skipped.
+- [done] On full success path: issue closed, branch merged into main.
+- [done] Integration test (mock `claude`, mock `gh`, real `git` in throwaway repo): one fully-unblocked issue → full pipeline → main has the commit → issue closed via mocked `gh`.
+- [done] Integration test for incomplete-implementer path: implementer doesn't emit `<promise>` → reviewer not called → merger not called → exit code reflects partial outcome.
 
 ---
 
@@ -189,12 +191,12 @@ User runs `npx tsx afk-loop/main.mts run --once --max-parallel=3` against a targ
 
 ### Acceptance criteria
 
-- [ ] `--max-parallel=3` runs three implementers concurrently in three separate worktrees.
-- [ ] One implementer's failure does not cancel the others (`Promise.allSettled` semantics).
-- [ ] Each implementer's JSONL log lands in its own `logs/issue-<N>/` directory — no cross-contamination.
-- [ ] After all implementers complete (success or fail), reviewers run for those that produced commits (parallel reviewers OK; they each touch only their own branch).
-- [ ] Merger runs once at end of iteration, serially over all reviewer-approved branches.
-- [ ] Integration test with 3 prepared mock-issue fixtures (one succeeds, one fails in implementer, one succeeds in implementer but fails in reviewer): asserts only the fully-clean one ends up merged.
+- [done] `--max-parallel=3` runs three implementers concurrently in three separate worktrees.
+- [done] One implementer's failure does not cancel the others (`Promise.allSettled` semantics).
+- [done] Each implementer's JSONL log lands in its own `logs/issue-<N>/` directory — no cross-contamination.
+- [done] After all implementers complete (success or fail), reviewers run for those that produced commits (parallel reviewers OK; they each touch only their own branch).
+- [done] Merger runs once at end of iteration, serially over all reviewer-approved branches.
+- [done] Integration test with 3 prepared mock-issue fixtures (one succeeds, one fails in implementer, one succeeds in implementer but fails in reviewer): asserts only the fully-clean one ends up merged.
 
 ---
 
@@ -210,12 +212,12 @@ A `state` module that reads/writes `<target>/.afk-loop/state.json` atomically (`
 
 ### Acceptance criteria
 
-- [ ] `afk-loop/state.ts` module with `loadState()`, `saveState(state)`, `markInFlight(issue, phase)`, `clearInFlight(issue)`, `markFailed(issue)`.
-- [ ] Atomic write: writes to `state.json.tmp`, `fsync`, `rename`. Verified by a test that interrupts mid-write and asserts the existing `state.json` is unchanged.
-- [ ] State file schema: `{schemaVersion: 1, rateLimitedUntil: ISO|null, inFlight: {[issue]: {phase, branch, startedAt, pid}}, failedThisRun: number[]}`.
-- [ ] On `afk-loop run` startup: read state. For each `inFlight` entry, `kill -0 <pid>` to check liveness. If dead → log "orphan recovered for issue N", clear from `inFlight`, leave branch and worktree intact (per failure-preservation policy).
-- [ ] `failedThisRun` is filtered out of the frontier in step #1's planner.
-- [ ] Test: simulate crash (write `state.json` with an `inFlight` entry pointing to a dead PID) → re-run → assert orphan recovered + frontier excludes that issue from this round if branch is still active.
+- [done] `afk-loop/state.ts` module with `loadState()`, `saveState(state)`, `markInFlight(issue, phase)`, `clearInFlight(issue)`, `markFailed(issue)`.
+- [done] Atomic write: writes to `state.json.tmp`, `fsync`, `rename`. Verified by a test that interrupts mid-write and asserts the existing `state.json` is unchanged.
+- [done] State file schema: `{schemaVersion: 1, rateLimitedUntil: ISO|null, inFlight: {[issue]: {phase, branch, startedAt, pid}}, failedThisRun: number[]}`.
+- [done] On `afk-loop run` startup: read state. For each `inFlight` entry, `kill -0 <pid>` to check liveness. If dead → log "orphan recovered for issue N", clear from `inFlight`, leave branch and worktree intact (per failure-preservation policy).
+- [done] `failedThisRun` is filtered out of the frontier in step #1's planner.
+- [done] Test: simulate crash (write `state.json` with an `inFlight` entry pointing to a dead PID) → re-run → assert orphan recovered + frontier excludes that issue from this round if branch is still active.
 
 ---
 
@@ -231,12 +233,12 @@ When any `claude` invocation returns a rate-limit error, the orchestrator parses
 
 ### Acceptance criteria
 
-- [ ] `claude-runner` detects rate-limit errors via stderr pattern match (e.g., `/rate.?limit/i` and `/usage limit/i`) and exit code.
-- [ ] Parses reset time from the error message if present (the Claude Code CLI emits an explicit time); falls back to `now + 60min`.
-- [ ] On detection: writes `rateLimitedUntil` to `state.json`, fires notification "AFK loop paused until <time>", calls `setTimeout` (or `sleep` via async) until reset, then continues the orchestration loop from where it left off (next iteration, not retry of the failed `claude` call).
-- [ ] On startup, if `rateLimitedUntil > now`, the orchestrator sleeps the difference before doing anything else.
-- [ ] In-flight implementers at the time of rate-limit are marked `inFlight` (they may have made commits) so reconciliation post-pause doesn't double-spawn them.
-- [ ] Mock-`claude` integration test: emits a rate-limit error → orchestrator writes state and sleeps a short test-only window (1 second) → wakes and resumes → asserts second iteration completes.
+- [done] `claude-runner` detects rate-limit errors via stderr pattern match (e.g., `/rate.?limit/i` and `/usage limit/i`) and exit code.
+- [done] Parses reset time from the error message if present (the Claude Code CLI emits an explicit time); falls back to `now + 60min`.
+- [done] On detection: writes `rateLimitedUntil` to `state.json`, fires notification "AFK loop paused until <time>", calls `setTimeout` (or `sleep` via async) until reset, then continues the orchestration loop from where it left off (next iteration, not retry of the failed `claude` call).
+- [done] On startup, if `rateLimitedUntil > now`, the orchestrator sleeps the difference before doing anything else.
+- [done] In-flight implementers at the time of rate-limit are marked `inFlight` (they may have made commits) so reconciliation post-pause doesn't double-spawn them.
+- [done] Mock-`claude` integration test: emits a rate-limit error → orchestrator writes state and sleeps a short test-only window (1 second) → wakes and resumes → asserts second iteration completes.
 
 ---
 
@@ -252,13 +254,13 @@ After the deterministic frontier is computed, optionally (controlled by `advisor
 
 ### Acceptance criteria
 
-- [ ] `phases.runAdvisoryPlanner(frontier, issues)` returns a string of concerns or "None".
-- [ ] Spawns `claude -p --max-turns 3 --output-format stream-json --permission-mode bypassPermissions` with the `plan-prompt.md` substituted with `{{FRONTIER_JSON}}` and `{{ISSUE_BODIES}}`.
-- [ ] `plan-prompt.md` exists at `afk-loop/prompts/plan-prompt.md` with the advisory-only instructions from the design.
-- [ ] Output (the `<concerns>...</concerns>` block) is appended to `summary.md` under "Planner concerns iteration K".
-- [ ] If `advisoryPlanner: false` in config, this phase is skipped entirely (zero `claude` invocations).
-- [ ] If the advisory planner itself rate-limits, log it and skip (don't pause the whole run for an advisory step).
-- [ ] Mock-`claude` test: asserts concerns appended to `summary.md` when on; asserts no `claude` spawn when off.
+- [done] `phases.runAdvisoryPlanner(frontier, issues)` returns a string of concerns or "None".
+- [done] Spawns `claude -p --max-turns 3 --output-format stream-json --permission-mode bypassPermissions` with the `plan-prompt.md` substituted with `{{FRONTIER_JSON}}` and `{{ISSUE_BODIES}}`.
+- [done] `plan-prompt.md` exists at `afk-loop/prompts/plan-prompt.md` with the advisory-only instructions from the design.
+- [done] Output (the `<concerns>...</concerns>` block) is appended to `summary.md` under "Planner concerns iteration K".
+- [done] If `advisoryPlanner: false` in config, this phase is skipped entirely (zero `claude` invocations).
+- [done] If the advisory planner itself rate-limits, log it and skip (don't pause the whole run for an advisory step).
+- [done] Mock-`claude` test: asserts concerns appended to `summary.md` when on; asserts no `claude` spawn when off.
 
 ---
 
@@ -274,13 +276,13 @@ Wrap the single-iteration orchestrator from #6 in a multi-iteration loop. After 
 
 ### Acceptance criteria
 
-- [ ] `afk-loop run` (without `--once`) loops over iterations until exit condition.
-- [ ] After each iteration: re-fetch issues, recompute frontier, take next batch.
-- [ ] Empty frontier → exit code 0, summary section "Run complete: DONE".
-- [ ] `Date.now() - runStartedAt > runtimeBudgetHours * 3600000` → finish current iteration's merger, exit code 0, summary section "Run complete: TIME_BUDGET".
-- [ ] Cycle detected at any iteration's plan step → exit code 1, summary section "Run aborted: CYCLE".
-- [ ] Integration test with 3 issues forming a chain (#42 → #43 → #44, where #43 is blocked by #42, #44 by #43): mock `claude` succeeds for all → asserts 3 iterations, all merged.
-- [ ] Integration test with `runtimeBudgetHours: 0.0001` (small) → asserts exits with TIME_BUDGET after iteration 1.
+- [done] `afk-loop run` (without `--once`) loops over iterations until exit condition.
+- [done] After each iteration: re-fetch issues, recompute frontier, take next batch.
+- [done] Empty frontier → exit code 0, summary section "Run complete: DONE".
+- [done] `Date.now() - runStartedAt > runtimeBudgetHours * 3600000` → finish current iteration's merger, exit code 0, summary section "Run complete: TIME_BUDGET".
+- [done] Cycle detected at any iteration's plan step → exit code 1, summary section "Run aborted: CYCLE".
+- [done] Integration test with 3 issues forming a chain (#42 → #43 → #44, where #43 is blocked by #42, #44 by #43): mock `claude` succeeds for all → asserts 3 iterations, all merged.
+- [done] Integration test with `runtimeBudgetHours: 0.0001` (small) → asserts exits with TIME_BUDGET after iteration 1.
 
 ---
 
@@ -296,14 +298,14 @@ The wake-up artifact layer. After each iteration, write a markdown section to `s
 
 ### Acceptance criteria
 
-- [ ] `observability` module with `appendSummarySection(section)`, `writeStatus(status)`, `notify(event, message)`.
-- [ ] `summary.md` is created if missing; otherwise appended. Header includes run start time + version.
-- [ ] Each iteration section uses the format from the design: outcome bullets (✅/⚠️), per-iteration breakdown, "Failed issues" subsection with reasons.
-- [ ] Commit hashes link to the GitHub commit URL: `https://github.com/<owner>/<repo>/commit/<sha>` (derive `<owner>/<repo>` from `gh repo view --json nameWithOwner`).
-- [ ] `status.json` shape: `{currentIteration, frontier: number[], inFlight: number[], lastEventAt, runState: "running"|"paused"|"done"|"failed"}`.
-- [ ] `notify(event, message)` shells out to `osascript -e 'display notification "..." with title "AFK Loop"'` on macOS; no-op on other platforms.
-- [ ] Four events fire exactly once each: `runStarted`, `rateLimitPaused`, `iterationCompleted`, `runFinished`. No commit-level pings.
-- [ ] Test (no real notifications): assert `osascript` is invoked with the right arguments at the right moments by stubbing `child_process.spawn`.
+- [done] `observability` module with `appendSummarySection(section)`, `writeStatus(status)`, `notify(event, message)`.
+- [done] `summary.md` is created if missing; otherwise appended. Header includes run start time + version.
+- [done] Each iteration section uses the format from the design: outcome bullets (✅/⚠️), per-iteration breakdown, "Failed issues" subsection with reasons.
+- [done] Commit hashes link to the GitHub commit URL: `https://github.com/<owner>/<repo>/commit/<sha>` (derive `<owner>/<repo>` from `gh repo view --json nameWithOwner`).
+- [done] `status.json` shape: `{currentIteration, frontier: number[], inFlight: number[], lastEventAt, runState: "running"|"paused"|"done"|"failed"}`.
+- [done] `notify(event, message)` shells out to `osascript -e 'display notification "..." with title "AFK Loop"'` on macOS; no-op on other platforms.
+- [done] Four events fire exactly once each: `runStarted`, `rateLimitPaused`, `iterationCompleted`, `runFinished`. No commit-level pings.
+- [done] Test (no real notifications): assert `osascript` is invoked with the right arguments at the right moments by stubbing `child_process.spawn`.
 
 ---
 
@@ -319,13 +321,13 @@ A one-shot CLI command that bulk-relabels all open issues from one label to anot
 
 ### Acceptance criteria
 
-- [ ] `afk-loop migrate-labels --from <X> --to <Y>` subcommand.
-- [ ] Lists all open issues with label `<X>` via `gh issue list --label <X> --state open --json number`.
-- [ ] For each: runs `gh issue edit <N> --remove-label <X> --add-label <Y>`.
-- [ ] Prints a summary of what changed: `migrated: 47 issues from "Sandcastle" to "AFK"`.
-- [ ] `--dry-run` flag prints what *would* be migrated without doing it.
-- [ ] Friendly error if either label doesn't exist on the repo (offers to create the destination via `gh label create`).
-- [ ] Test against a throwaway repo with mocked `gh`: asserts the right `gh edit` calls are issued for each open issue with the source label.
+- [done] `afk-loop migrate-labels --from <X> --to <Y>` subcommand.
+- [done] Lists all open issues with label `<X>` via `gh issue list --label <X> --state open --json number`.
+- [done] For each: runs `gh issue edit <N> --remove-label <X> --add-label <Y>`.
+- [done] Prints a summary of what changed: `migrated: 47 issues from "Sandcastle" to "AFK"`.
+- [done] `--dry-run` flag prints what *would* be migrated without doing it.
+- [done] Friendly error if either label doesn't exist on the repo (offers to create the destination via `gh label create`).
+- [done] Test against a throwaway repo with mocked `gh`: asserts the right `gh edit` calls are issued for each open issue with the source label.
 
 ---
 
@@ -341,14 +343,14 @@ A bootstrap command for new target repos: `afk-loop init` writes a sensible-defa
 
 ### Acceptance criteria
 
-- [ ] `afk-loop init` subcommand, runs in target-repo cwd.
-- [ ] Creates `<target>/.afk-loop/` directory if missing.
-- [ ] Writes `<target>/.afk-loop/config.json` from a template with defaults: `label: "AFK"`, `hitlPattern: "\\[HITL\\]"`, `mainBranch: "main"`, `maxParallel: 3`, `maxTurnsPerImplementer: 50`, `advisoryPlanner: false`, `runtimeBudgetHours: 8`. Refuses to overwrite an existing config (suggests `--force`).
-- [ ] Writes `<target>/.afk-loop/CODING_STANDARDS.md` from a starter template (sections: Style, Testing, Architecture).
-- [ ] Adds `.afk-loop/` to `<target>/.gitignore` (idempotent — checks if line already present).
-- [ ] Prints next steps: how to label issues, how to run `afk-loop run`, where the wake-up summary lives.
-- [ ] `afk-loop/README.md` covers: prerequisites (Node, `gh`, `claude` CLI logged in), `afk-loop init` flow, `afk-loop run` flow, `afk-loop migrate-labels`, the morning-after workflow (`cd .afk-loop/worktrees/issue-N` for failed slices), all config knobs, and the Docker revisit trigger.
-- [ ] Integration test: `afk-loop init` against a fresh `git init`'d throwaway repo creates the right files with the right contents and adds the right gitignore line.
+- [done] `afk-loop init` subcommand, runs in target-repo cwd.
+- [done] Creates `<target>/.afk-loop/` directory if missing.
+- [done] Writes `<target>/.afk-loop/config.json` from a template with defaults: `label: "AFK"`, `hitlPattern: "\\[HITL\\]"`, `mainBranch: "main"`, `maxParallel: 3`, `maxTurnsPerImplementer: 50`, `advisoryPlanner: false`, `runtimeBudgetHours: 8`. Refuses to overwrite an existing config (suggests `--force`).
+- [done] Writes `<target>/.afk-loop/CODING_STANDARDS.md` from a starter template (sections: Style, Testing, Architecture).
+- [done] Adds `.afk-loop/` to `<target>/.gitignore` (idempotent — checks if line already present).
+- [done] Prints next steps: how to label issues, how to run `afk-loop run`, where the wake-up summary lives.
+- [done] `afk-loop/README.md` covers: prerequisites (Node, `gh`, `claude` CLI logged in), `afk-loop init` flow, `afk-loop run` flow, `afk-loop migrate-labels`, the morning-after workflow (`cd .afk-loop/worktrees/issue-N` for failed slices), all config knobs, and the Docker revisit trigger.
+- [done] Integration test: `afk-loop init` against a fresh `git init`'d throwaway repo creates the right files with the right contents and adds the right gitignore line.
 
 ---
 
@@ -374,5 +376,109 @@ After #3 merges: **#4, #5** (parallel).
 After #4 + #5: **#6**.
 After #6: **#7, #8, #10, #11, #12** (parallel — many slices unlock at once).
 After #11: **#14**.
+
+This is the perfect dogfood scenario — once #1–#7 land, `afk-loop` can finish building itself.
+
+---
+
+## Round 2: TDD enforcement + global install + git bootstrap (post-v0.1.0)
+
+The slices below were added after the initial 14 shipped. They land in commits A–E on top of the v0.1.0 baseline.
+
+---
+
+## #15 — Inline `/tdd` doctrine into implement-prompt
+
+**Type**: AFK
+**Blocked by**: None — content-only change to `prompts/implement-prompt.md`.
+**Status**: ✅ Completed. Commit B (`feat(prompts): inline /tdd doctrine into implement-prompt`).
+
+### What to build
+
+The implement-prompt currently references `/tdd` in prose, which agents under context pressure skip. Inline the full TDD doctrine — philosophy, horizontal-slicing anti-pattern, plan/tracer-bullet/loop/refactor workflow, mocking guidance, deep-module hint, stub escape hatch, and a strict commit-shape contract — directly into `prompts/implement-prompt.md`. The agent's system prompt now contains the discipline every turn; it cannot be forgotten.
+
+### Acceptance criteria
+
+- [done] `prompts/implement-prompt.md` includes a "TDD DOCTRINE" section with: philosophy, anti-horizontal-slicing warning, planning step, tracer bullet, incremental loop, refactor rules.
+- [done] Includes a "COMMIT SHAPE CONTRACT" section that names the test-only / impl / refactor commit shapes.
+- [done] Defines stub escape hatch (signature + `throw new Error("not implemented")`) as allowed inside a test-only commit.
+- [done] References Conventional Commits prefixes (`test:`, `feat:`, `refactor:`).
+- [done] Removes the prose-only `/tdd` reference in favour of the inlined doctrine.
+
+---
+
+## #16 — TDD evidence check via diff-shape inference (reviewer)
+
+**Type**: AFK
+**Blocked by**: #15 — implementer must follow the contract before reviewer can check it.
+**Status**: ✅ Completed. Commit C (`feat(reviewer): add TDD evidence check via diff-shape inference`).
+
+### What to build
+
+The reviewer mechanically verifies the commit-shape contract from `git log --reverse main..HEAD --name-only`. For each test file added on the branch, require at least one preceding test-only commit. Auto-skip when the branch added no test files (refactor / docs / config issues). On failure, refuse via missing `<promise>COMPLETE</promise>` and comment on the issue with the specific test files missing evidence.
+
+### Acceptance criteria
+
+- [done] `prompts/review-prompt.md` step 3 ("TDD evidence check") added with `git log --name-only` instructions.
+- [done] Auto-skip rule: if no test files were added/modified on the branch, the evidence check is skipped entirely.
+- [done] Stub escape hatch defined and accepted as test-only.
+- [done] Refusal message names the specific test files missing preceding test-only commits.
+- [done] AC verification (step 2) remains as the independent rule for "behavior shipped without tests".
+
+---
+
+## #17 — Global install via `bin/afk-loop.mjs` shim
+
+**Type**: AFK
+**Blocked by**: None — independent of TDD work.
+**Status**: ✅ Completed. Commit D (`feat(install): global install via npm install -g github:user/afk-loop`).
+
+### What to build
+
+Replace the `npx tsx main.mts` alias workflow with `npm install -g github:nabi-zakaria-dev/afk-loop`. A `bin/afk-loop.mjs` shim locates the package's installed `tsx` and spawns `main.mts` with the user's cwd preserved. `tsx` moves from `devDependencies` to `dependencies`. README install section rewritten.
+
+### Acceptance criteria
+
+- [done] `bin/afk-loop.mjs` exists, is executable, and forwards stdio + exit code from `tsx main.mts`.
+- [done] Friendly error messages when `tsx` or `main.mts` are missing.
+- [done] `package.json` `bin` points to `./bin/afk-loop.mjs`.
+- [done] `tsx` listed under `dependencies` (not `devDependencies`).
+- [done] `package.json` has a `files` allowlist controlling what ships.
+- [done] `package.json` has `homepage` and `repository` fields.
+- [done] README install section documents `npm install -g github:nabi-zakaria-dev/afk-loop` (and removes the alias suggestion).
+- [done] README documents Conventional Commits convention used for this project.
+- [done] Smoke test: `node bin/afk-loop.mjs help` prints the help page.
+
+---
+
+## #18 — ISSUES.md status label format `[todo]` / `[done]`
+
+**Type**: AFK
+**Blocked by**: None — content-only change.
+**Status**: ✅ Completed. Commit E (`docs(issues): migrate AC labels and append new feature slices`).
+
+### What to build
+
+Replace every empty `- [ ]` GitHub-checkbox AC marker in ISSUES.md with a text-labelled bracket: `[todo]` for not-yet-done, `[done]` for satisfied. Since all 14 v0.1.0 issues are completed at migration time, every existing AC becomes `[done]`. Going forward, new ACs start `[todo]` and flip to `[done]` as the work lands.
+
+### Acceptance criteria
+
+- [done] Every AC in issues #1–#14 uses `[done]`. No `[ ]` remains in the file.
+- [done] ISSUES.md preamble notes the new label vocabulary.
+- [done] New issues #15–#18 added with their own AC checklists in `[done]` status.
+
+---
+
+## Round-2 dep-graph
+
+```
+v0.1.0 baseline (already shipped)
+   ↓
+#17 (independent, ships alongside)
+   ↓
+#15 ── #16
+   ↓
+#18 (depends on #15/#16/#17 having something to record)
+```
 
 This is the perfect dogfood scenario — once #1–#7 land, `afk-loop` can finish building itself.
