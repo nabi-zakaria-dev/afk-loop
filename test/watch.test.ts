@@ -21,6 +21,29 @@ describe("renderFrame", () => {
     expect(frame).toContain("running");
   });
 
+  it("renders one line per inFlight item with issue, phase, title, and elapsed", () => {
+    const status: StatusJson = {
+      currentIteration: 2,
+      frontier: [],
+      inFlight: [
+        {
+          issue: 42,
+          title: "Display pending invoices",
+          phase: "implementer",
+          startedAt: "2026-05-08T14:30:00Z",
+          lastTransitionAt: "2026-05-08T14:30:00Z",
+        },
+      ],
+      lastEventAt: "2026-05-08T14:31:12Z",
+      runState: "running",
+    };
+    const frame = renderFrame(status, { now: new Date("2026-05-08T14:31:12Z") });
+    expect(frame).toContain("#42");
+    expect(frame).toContain("impl");
+    expect(frame).toContain("Display pending invoices");
+    expect(frame).toContain("1m 12s");
+  });
+
   it("shows 'no issues in flight' when inFlight is empty", () => {
     const status: StatusJson = {
       currentIteration: 1,
