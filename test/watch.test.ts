@@ -360,6 +360,47 @@ describe("watchLoop", () => {
     expect(afterExit).toContain(".afk-loop/logs/issue-41/");
   });
 
+  it("'q' keypress exits without dumping the error list (only 'l' does that)", async () => {
+    const writes: string[] = [];
+    let keyHandler: ((k: string) => void) | null = null;
+    const status: StatusJson = {
+      currentIteration: 1,
+      frontier: [],
+      inFlight: [],
+      failed: [
+        {
+          issue: 40,
+          category: "reviewer-refused",
+          reason: "AC3 unverified",
+          logPath: ".afk-loop/logs/issue-40/",
+        },
+      ],
+      lastEventAt: "2026-05-08T14:30:00Z",
+      runState: "running",
+    };
+
+    const promise = watchLoop({
+      readStatus: () => status,
+      write: (s) => writes.push(s),
+      onKey: (h) => {
+        keyHandler = h;
+        return () => {};
+      },
+      setInterval: () => () => {},
+    });
+
+    keyHandler!("q");
+    await promise;
+
+    const all = writes.join("");
+    const exitIdx = all.indexOf("\x1b[?1049l");
+    expect(exitIdx).toBeGreaterThanOrEqual(0);
+    const afterExit = all.slice(exitIdx);
+    // After q-exit, no error list should be dumped
+    expect(afterExit).not.toContain("AC3 unverified");
+    expect(afterExit).not.toContain(".afk-loop/logs/issue-40/");
+  });
+
   it("wraps output in alt-screen enter (start) and exit (end) escape sequences", async () => {
     const writes: string[] = [];
     let keyHandler: ((k: string) => void) | null = null;
